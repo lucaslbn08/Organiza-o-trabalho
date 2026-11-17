@@ -1,9 +1,13 @@
-import { app, BrowserWindow, dialog, screen } from 'electron';
+import { app, BrowserWindow, dialog, screen, protocol, ipcMain } from 'electron';
 import path from 'node:path';
 import { openDatabase, migrate, checkIntegrity, type DB } from './db/connection';
 import { registerIpc } from './ipc';
 import { initLogger, log } from './logger';
 import { SettingsService } from './services/workspace';
+import { MediaService } from './services/notes';
+
+// imagens das notas: ws-media://<sha256>, servidas do banco (somente leitura)
+protocol.registerSchemesAsPrivileged([{ scheme: 'ws-media', privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
 
 /**
  * Dados do usuário ficam em %APPDATA%\Workspace (app.getPath('userData')),
@@ -61,7 +65,19 @@ function createWindow(): void {
   });
   if (st.maximized) mainWindow.maximize();
   mainWindow.once('ready-to-show', () => mainWindow?.show());
-  mainWindow.on('close', () => mainWindow && saveWinState(mainWindow));
+  // antes de fechar, pede ao renderer que grave edições pendentes (autosave com debounce)
+  let flushed = false;
+  mainWindow.on('close', (e) => {
+    if (!mainWindow) return;
+    saveWinState(mainWindow);
+    if (flushed) return;
+    e.preventDefault();
+    const win = mainWindow;
+    const done = () => { flushed = true; ipcMain.removeAllListeners('app:flushed'); if (!win.isDestroyed()) win.close(); };
+    ipcMain.once('app:flushed', done);
+    setTimeout(done, 2500); // nunca impede o fechamento por mais de 2,5 s
+    win.webContents.send('app:flush');
+  });
   // bloqueia navegação e novas janelas arbitrárias no renderer
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   mainWindow.webContents.on('will-navigate', (e, url) => { if (!url.startsWith(process.env.VITE_DEV_SERVER_URL ?? 'file://')) e.preventDefault(); });
@@ -87,7 +103,12 @@ async function bootstrap(): Promise<void> {
     return;
   }
   let ws = new SettingsService(db).get().activeWorkspaceId || 1;
-  registerIpc({ db, dataDir, version: app.getVersion(), ws: () => ws, setWs: (n) => { ws = n; } });
+  const media = new MediaService(db);
+  protocol.handle('ws-media', (req) => {
+    const m = media.get(new URL(req.url).hostname);
+    return m ? new Response(new Uint8Array(m.data), { headers: { 'content-type': m.mime, 'cache-control': 'max-age=31536000, immutable' } }) : new Response('não encontrado', { status: 404 });
+  });
+  registerIpc({ media, db, dataDir, version: app.getVersion(), ws: () => ws, setWs: (n) => { ws = n; } });
   createWindow();
 }
 

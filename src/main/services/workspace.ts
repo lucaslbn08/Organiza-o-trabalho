@@ -2,13 +2,14 @@ import type { DB } from '../db/connection';
 import type { Project, Category, Tag, Workspace, KanbanColumn, DashboardStats, TrashItem, Settings } from '../../shared/types';
 import { logHistory } from './history';
 import { TaskService } from './tasks';
+import type { NoteService } from './notes';
 
 const now = () => new Date().toISOString();
 
 export const DEFAULT_SETTINGS: Settings = {
   theme: 'dark', accent: '#6366f1', uiScale: 1, animations: true, sidebarCollapsed: false, showCompleted: true,
-  dashboardPanels: ['stats', 'priority', 'dueSoon', 'projects', 'shortcuts'].map((id) => ({ id, visible: true })),
-  lastView: 'home', activeWorkspaceId: 1,
+  dashboardPanels: ['stats', 'priority', 'dueSoon', 'notes', 'projects', 'shortcuts'].map((id) => ({ id, visible: true })),
+  lastView: 'home', activeWorkspaceId: 1, openNotes: [], activeNote: null,
 };
 
 export class SettingsService {
@@ -17,6 +18,9 @@ export class SettingsService {
     const rows = this.db.prepare('SELECT key, value FROM settings').all() as { key: string; value: string }[];
     const s: Record<string, unknown> = { ...DEFAULT_SETTINGS };
     for (const r of rows) { try { s[r.key] = JSON.parse(r.value); } catch { /* valor corrompido: mantém padrão */ } }
+    // painéis novos (de versões mais recentes) aparecem para quem já tinha a configuração salva
+    const panels = s.dashboardPanels as Settings['dashboardPanels'];
+    for (const p of DEFAULT_SETTINGS.dashboardPanels) if (!panels.some((x) => x.id === p.id)) panels.push({ ...p });
     return s as unknown as Settings;
   }
   set(patch: Partial<Settings>): Settings {
@@ -83,7 +87,7 @@ export class OrgService {
       .run(p.title?.trim() || c.title, p.color ?? c.color, p.visible === undefined ? c.visible : p.visible ? 1 : 0, id);
   }
 
-  dashboard(tasks: TaskService): DashboardStats {
+  dashboard(tasks: TaskService, notes: NoteService): DashboardStats {
     const counts = this.db.prepare('SELECT status, COUNT(*) AS n FROM tasks WHERE workspace_id = ? AND deleted_at IS NULL AND parent_id IS NULL GROUP BY status').all(this.ws()) as { status: string; n: number }[];
     const c = Object.fromEntries(counts.map((x) => [x.status, x.n])) as Record<string, number>;
     const open = tasks.list({ showCompleted: false, sort: 'due' });
@@ -96,6 +100,7 @@ export class OrgService {
       dueSoon: open.filter((t) => t.due_date && t.due_date >= today && t.due_date <= in7).slice(0, 8),
       overdue: open.filter((t) => t.due_date && t.due_date < today).slice(0, 8),
       recentProjects: this.projects().slice(0, 6),
+      recentNotes: notes.recent(6),
     };
   }
 
@@ -104,15 +109,19 @@ export class OrgService {
       SELECT 'task' AS entity_type, id, title, deleted_at FROM tasks WHERE workspace_id = ? AND deleted_at IS NOT NULL
       UNION ALL
       SELECT 'project', id, name, deleted_at FROM projects WHERE workspace_id = ? AND deleted_at IS NOT NULL
-      ORDER BY deleted_at DESC`).all(this.ws(), this.ws()) as TrashItem[];
+      UNION ALL
+      SELECT 'note', id, CASE WHEN title = '' THEN 'Sem título' ELSE title END, deleted_at FROM notes WHERE workspace_id = ? AND deleted_at IS NOT NULL
+      ORDER BY deleted_at DESC`).all(this.ws(), this.ws(), this.ws()) as TrashItem[];
   }
-  restore(type: TrashItem['entity_type'], id: number, tasks: TaskService): void {
+  restore(type: TrashItem['entity_type'], id: number, tasks: TaskService, notes: NoteService): void {
     if (type === 'task') return tasks.restore(id);
+    if (type === 'note') return notes.restore(id);
     this.db.prepare('UPDATE projects SET deleted_at = NULL WHERE id = ? AND workspace_id = ?').run(id, this.ws());
     logHistory(this.db, this.ws(), 'project', id, 'restaurado');
   }
-  purge(type: TrashItem['entity_type'], id: number, tasks: TaskService): void {
+  purge(type: TrashItem['entity_type'], id: number, tasks: TaskService, notes: NoteService): void {
     if (type === 'task') return tasks.purge(id);
+    if (type === 'note') return notes.purge(id);
     const r = this.db.prepare('DELETE FROM projects WHERE id = ? AND workspace_id = ? AND deleted_at IS NOT NULL').run(id, this.ws());
     if (r.changes) logHistory(this.db, this.ws(), 'project', id, 'excluído permanentemente');
   }
@@ -120,6 +129,7 @@ export class OrgService {
     this.db.transaction(() => {
       this.db.prepare('DELETE FROM tasks WHERE workspace_id = ? AND deleted_at IS NOT NULL').run(this.ws());
       this.db.prepare('DELETE FROM projects WHERE workspace_id = ? AND deleted_at IS NOT NULL').run(this.ws());
+      this.db.prepare('DELETE FROM notes WHERE workspace_id = ? AND deleted_at IS NOT NULL').run(this.ws());
       logHistory(this.db, this.ws(), 'trash', 0, 'lixeira esvaziada');
     })();
   }

@@ -17,23 +17,31 @@ export function useQuery<T>(fn: () => Promise<T>, deps: unknown[] = []): { data:
   return { data, reload, error };
 }
 
-/** Salvamento automático com debounce; descarrega pendências ao desmontar. */
+/** Registro global de gravações pendentes: o processo principal pede `flushAll` antes de fechar a janela. */
+const flushers = new Set<() => Promise<void>>();
+export async function flushAll(): Promise<void> { await Promise.allSettled([...flushers].map((f) => f())); }
+
+/** Salvamento automático com debounce; descarrega pendências ao desmontar e ao fechar o app. */
 export function useAutosave<T>(value: T, save: (v: T) => Promise<unknown>, delay = 500): 'saved' | 'pending' | 'error' {
   const [state, setState] = useState<'saved' | 'pending' | 'error'>('saved');
   const first = useRef(true); const pending = useRef<T | null>(null);
   const saveRef = useRef(save); saveRef.current = save;
-  const flush = useCallback(() => {
+  const flush = useCallback(async () => {
     if (pending.current === null) return;
     const v = pending.current; pending.current = null;
-    saveRef.current(v).then(() => setState('saved')).catch(() => setState('error'));
+    try { await saveRef.current(v); setState('saved'); } catch { setState('error'); }
   }, []);
+  useEffect(() => { flushers.add(flush); return () => { flushers.delete(flush); }; }, [flush]);
+  // compara pelo conteúdo serializado: re-renderizações com o mesmo valor não disparam gravação
+  const key = JSON.stringify(value);
+  const valueRef = useRef(value); valueRef.current = value;
   useEffect(() => {
     if (first.current) { first.current = false; return; }
-    pending.current = value; setState('pending');
+    pending.current = valueRef.current; setState('pending');
     const t = setTimeout(flush, delay);
     return () => clearTimeout(t);
-  }, [value, delay, flush]);
-  useEffect(() => () => flush(), [flush]);
+  }, [key, delay, flush]);
+  useEffect(() => () => { void flush(); }, [flush]);
   return state;
 }
 

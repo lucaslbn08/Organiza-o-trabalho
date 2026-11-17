@@ -5,6 +5,8 @@ import { checkIntegrity, getUserVersion } from './db/connection';
 import { TaskService } from './services/tasks';
 import { OrgService, SettingsService } from './services/workspace';
 import { listHistory } from './services/history';
+import { NoteService, MediaService } from './services/notes';
+import { searchAll } from './services/search';
 import { TASK_STATUSES, TASK_PRIORITIES, RECURRENCES } from '../shared/types';
 import { log } from './logger';
 
@@ -34,15 +36,23 @@ const settingsPatch = z.object({
   animations: z.boolean(), sidebarCollapsed: z.boolean(), showCompleted: z.boolean(),
   dashboardPanels: z.array(z.object({ id: z.string().max(40), visible: z.boolean() })).max(30),
   lastView: z.string().max(40), activeWorkspaceId: id,
+  openNotes: z.array(id).max(30), activeNote: id.nullable(),
 }).partial();
-const trashType = z.enum(['task', 'project']);
+const trashType = z.enum(['task', 'project', 'note']);
+const docJson = z.string().max(50_000_000).refine((v) => { try { return JSON.parse(v)?.type === 'doc'; } catch { return false; } }, 'documento inválido');
+const notePatch = z.object({
+  title: z.string().max(500).optional(), content_json: docJson.optional(), folder_id: id.nullable().optional(),
+  project_id: id.nullable().optional(), category_id: id.nullable().optional(), pinned: z.boolean().optional(),
+  favorite: z.boolean().optional(), tags: z.array(z.string().max(60)).max(50).optional(),
+});
 
-export interface IpcContext { db: DB; dataDir: string; version: string; ws: () => number; setWs: (n: number) => void }
+export interface IpcContext { media: MediaService; db: DB; dataDir: string; version: string; ws: () => number; setWs: (n: number) => void }
 
 export function registerIpc(ctx: IpcContext): void {
   const tasks = new TaskService(ctx.db, ctx.ws);
   const org = new OrgService(ctx.db, ctx.ws);
   const settings = new SettingsService(ctx.db);
+  const notes = new NoteService(ctx.db, ctx.ws);
 
   const notify = (scope: string) => BrowserWindow.getAllWindows().forEach((w) => w.webContents.send('data:changed', scope));
 
@@ -106,12 +116,35 @@ export function registerIpc(ctx: IpcContext): void {
   handle('kanban:columns', [], () => org.columns());
   handle('kanban:updateColumn', [id, z.object({ title: z.string().max(60).optional(), color: color.optional(), visible: z.boolean().optional() })], (i, p) => org.updateColumn(i, p), 'kanban');
 
-  handle('dashboard:stats', [], () => org.dashboard(tasks));
+  handle('dashboard:stats', [], () => org.dashboard(tasks, notes));
   handle('history:list', [z.number().int().optional()], (l) => listHistory(ctx.db, ctx.ws(), l ?? 200));
   handle('trash:list', [], () => org.trash());
-  handle('trash:restore', [trashType, id], (t, i) => org.restore(t, i, tasks), 'trash');
-  handle('trash:purge', [trashType, id], (t, i) => org.purge(t, i, tasks), 'trash');
+  handle('trash:restore', [trashType, id], (t, i) => org.restore(t, i, tasks, notes), 'trash');
+  handle('trash:purge', [trashType, id], (t, i) => org.purge(t, i, tasks, notes), 'trash');
   handle('trash:empty', [], () => org.emptyTrash(), 'trash');
+  const noteQuery = z.object({
+    search: z.string().max(200).optional(), folder_id: id.nullable().optional(), project_id: id.optional(), task_id: id.optional(),
+    favorites: z.boolean().optional(), tag: z.string().max(60).optional(), category_id: id.optional(),
+  });
+  handle('notes:list', [noteQuery.optional()], (q) => notes.list(q ?? {}));
+  handle('notes:get', [id], (i) => notes.get(i));
+  handle('notes:create', [z.object({ title: z.string().max(500).optional(), folder_id: id.nullable().optional(), project_id: id.nullable().optional(), task_id: id.optional() }).optional()], (i) => notes.create(i ?? {}), 'notes');
+  handle('notes:update', [id, notePatch], (i, p) => notes.update(i, p), 'notes');
+  handle('notes:duplicate', [id], (i) => notes.duplicate(i), 'notes');
+  handle('notes:remove', [id], (i) => notes.remove(i), 'notes');
+  handle('notes:linkTask', [id, id], (n, t) => notes.linkTask(n, t), 'notes');
+  handle('notes:unlinkTask', [id, id], (n, t) => notes.unlinkTask(n, t), 'notes');
+  handle('notes:versions', [id], (i) => notes.versions(i));
+  handle('notes:versionContent', [id], (i) => notes.versionContent(i));
+  handle('notes:snapshot', [id], (i) => notes.snapshot(i), 'notes');
+  handle('notes:restoreVersion', [id], (i) => notes.restoreVersion(i), 'notes');
+  handle('notes:folders', [], () => notes.folders());
+  handle('notes:createFolder', [z.string().trim().min(1).max(120), id.nullable()], (n, p) => notes.createFolder(n, p), 'folders');
+  handle('notes:renameFolder', [id, z.string().trim().min(1).max(120)], (i, n) => notes.renameFolder(i, n), 'folders');
+  handle('notes:moveFolder', [id, id.nullable()], (i, p) => notes.moveFolder(i, p), 'folders');
+  handle('notes:removeFolder', [id], (i) => notes.removeFolder(i), 'folders');
+  handle('media:save', [z.instanceof(Uint8Array), z.string().max(40)], (b, m) => ctx.media.save(b, m));
+  handle('search:query', [z.string().max(200), z.array(z.enum(['task', 'note', 'project', 'tag'])).optional()], (q, t) => searchAll(ctx.db, ctx.ws(), q, t));
   handle('db:checkIntegrity', [], () => checkIntegrity(ctx.db));
 
   // links externos de tarefas: somente http(s)/mailto, abertos no navegador padrão

@@ -19,12 +19,25 @@ const api: WorkspaceApi = {
   kanban: { columns: call('kanban:columns'), updateColumn: call('kanban:updateColumn') } as WorkspaceApi['kanban'],
   dashboard: { stats: call('dashboard:stats') } as WorkspaceApi['dashboard'],
   history: { list: call('history:list') } as WorkspaceApi['history'],
+  notes: {
+    list: call('notes:list'), get: call('notes:get'), create: call('notes:create'), update: call('notes:update'),
+    duplicate: call('notes:duplicate'), remove: call('notes:remove'), linkTask: call('notes:linkTask'), unlinkTask: call('notes:unlinkTask'),
+    versions: call('notes:versions'), versionContent: call('notes:versionContent'), snapshot: call('notes:snapshot'), restoreVersion: call('notes:restoreVersion'),
+    folders: call('notes:folders'), createFolder: call('notes:createFolder'), renameFolder: call('notes:renameFolder'),
+    moveFolder: call('notes:moveFolder'), removeFolder: call('notes:removeFolder'),
+  } as WorkspaceApi['notes'],
+  media: { save: call('media:save') } as WorkspaceApi['media'],
+  search: { query: call('search:query') } as WorkspaceApi['search'],
   trash: { list: call('trash:list'), restore: call('trash:restore'), purge: call('trash:purge'), empty: call('trash:empty') } as WorkspaceApi['trash'],
   db: { checkIntegrity: call('db:checkIntegrity') } as WorkspaceApi['db'],
   onDataChanged(cb) {
     const l = (_: unknown, scope: string) => cb(scope);
     ipcRenderer.on('data:changed', l);
     return () => ipcRenderer.removeListener('data:changed', l);
+  },
+  onFlushRequest(cb) {
+    ipcRenderer.removeAllListeners('app:flush');
+    ipcRenderer.on('app:flush', () => { cb().catch(() => undefined).finally(() => ipcRenderer.send('app:flushed')); });
   },
 };
 contextBridge.exposeInMainWorld('workspace', api);

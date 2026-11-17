@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Plus, ArrowLeft } from 'lucide-react';
 import type { Settings } from '../../shared/types';
-import { api, useQuery } from '../lib/api';
+import { api, useQuery, fmtDateTime } from '../lib/api';
 import { useUi } from '../lib/ui';
 import { TasksView } from './Tasks';
 
@@ -38,9 +38,10 @@ export function ProjectsView({ go }: { go: (v: string, arg?: number) => void }) 
   );
 }
 
-export function ProjectDetailView({ id, settings, go, onOpen, onQuickAdd }: { id: number; settings: Settings; go: (v: string) => void; onOpen: (id: number) => void; onQuickAdd: () => void }) {
+export function ProjectDetailView({ id, settings, go, onOpen, openNote, newNote }: { id: number; settings: Settings; go: (v: string) => void; onOpen: (id: number) => void; onQuickAdd: () => void; openNote: (id: number) => void; newNote: (projectId: number) => void }) {
   const ui = useUi();
   const { data: projects = [] } = useQuery(() => api().projects.list());
+  const { data: notes = [] } = useQuery(() => api().notes.list({ project_id: id }), [id]);
   const p = projects.find((x) => x.id === id);
   if (!p) return <div className="view"><button className="btn" onClick={() => go('projects')}><ArrowLeft size={16} /> Projetos</button></div>;
   return (
@@ -49,7 +50,9 @@ export function ProjectDetailView({ id, settings, go, onOpen, onQuickAdd }: { id
         <button className="btn ghost" onClick={() => go('projects')}><ArrowLeft size={16} /> Projetos</button>
         <h2>{p.name}</h2>
         <textarea rows={2} defaultValue={p.description} placeholder="Descrição do projeto" onBlur={(e) => e.target.value !== p.description && ui.run(api().projects.update(p.id, { description: e.target.value }))} />
-        <small className="muted">Notas, desenhos, quadros e arquivos do projeto serão reunidos aqui nas próximas etapas.</small>
+        <h4 className="row">Anotações do projeto <button className="btn" onClick={() => newNote(p.id)}><Plus size={14} /> Nova</button></h4>
+        {notes.length ? <ul className="mini-list">{notes.map((n) => <li key={n.id} onClick={() => openNote(n.id)}><span className="task-title">{n.title || 'Sem título'}</span><small className="muted">{fmtDateTime(n.updated_at)}</small></li>)}</ul> : <p className="muted">Nenhuma anotação neste projeto.</p>}
+        <small className="muted">Desenhos, quadros e arquivos do projeto serão reunidos aqui nas próximas etapas.</small>
       </div>
       <TasksView settings={settings} projectId={p.id} onOpen={onOpen} onQuickAdd={async () => { const t = await ui.run(api().tasks.create({ title: 'Nova tarefa', project_id: p.id })); if (t) onOpen(t.id); }} />
     </div>

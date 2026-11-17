@@ -58,11 +58,11 @@ export interface KanbanColumn { id: number; workspace_id: number; status: TaskSt
 export interface HistoryEntry {
   id: number; entity_type: string; entity_id: number; action: string; details: string; created_at: string;
 }
-export interface TrashItem { entity_type: 'task' | 'project'; id: number; title: string; deleted_at: string }
+export interface TrashItem { entity_type: 'task' | 'project' | 'note'; id: number; title: string; deleted_at: string }
 
 export interface DashboardStats {
   total: number; pending: number; in_progress: number; paused: number; done: number; cancelled: number;
-  priority: Task[]; dueSoon: Task[]; overdue: Task[]; recentProjects: Project[];
+  priority: Task[]; dueSoon: Task[]; overdue: Task[]; recentProjects: Project[]; recentNotes: NoteSummary[];
 }
 
 export interface Settings {
@@ -70,9 +70,30 @@ export interface Settings {
   sidebarCollapsed: boolean; showCompleted: boolean;
   dashboardPanels: { id: string; visible: boolean }[];
   lastView: string; activeWorkspaceId: number;
+  openNotes: number[]; activeNote: number | null;
 }
 
 export interface AppInfo { version: string; dbVersion: number; dataDir: string; platform: string; electron: string }
+
+export interface NoteFolder { id: number; workspace_id: number; parent_id: number | null; name: string; position: number }
+export interface NoteSummary {
+  id: number; title: string; folder_id: number | null; project_id: number | null; category_id: number | null;
+  pinned: 0 | 1; favorite: 0 | 1; created_at: string; updated_at: string; excerpt: string; tags: Tag[];
+}
+export interface Note extends NoteSummary {
+  content_json: string; revision: number; tasks: { id: number; title: string; status: TaskStatus }[];
+}
+export interface NoteVersion { id: number; note_id: number; title: string; reason: string; created_at: string; size: number }
+export interface NoteQuery {
+  search?: string; folder_id?: number | null; project_id?: number; task_id?: number; favorites?: boolean;
+  tag?: string; category_id?: number;
+}
+export interface NotePatch {
+  title?: string; content_json?: string; folder_id?: number | null; project_id?: number | null; category_id?: number | null;
+  pinned?: boolean; favorite?: boolean; tags?: string[];
+}
+export type SearchType = 'task' | 'note' | 'project' | 'tag';
+export interface SearchHit { type: SearchType; id: number; title: string; snippet: string; extra?: string }
 
 /** API exposta ao renderer pelo preload (contextBridge). */
 export interface WorkspaceApi {
@@ -104,7 +125,22 @@ export interface WorkspaceApi {
   };
   dashboard: { stats(): Promise<DashboardStats> };
   history: { list(limit?: number): Promise<HistoryEntry[]> };
+  notes: {
+    list(q: NoteQuery): Promise<NoteSummary[]>; get(id: number): Promise<Note>;
+    create(input?: { title?: string; folder_id?: number | null; project_id?: number | null; task_id?: number }): Promise<Note>;
+    update(id: number, patch: NotePatch): Promise<{ revision: number; updated_at: string }>;
+    duplicate(id: number): Promise<Note>; remove(id: number): Promise<void>;
+    linkTask(noteId: number, taskId: number): Promise<void>; unlinkTask(noteId: number, taskId: number): Promise<void>;
+    versions(noteId: number): Promise<NoteVersion[]>; versionContent(versionId: number): Promise<{ title: string; content_json: string }>;
+    snapshot(noteId: number): Promise<void>; restoreVersion(versionId: number): Promise<void>;
+    folders(): Promise<NoteFolder[]>; createFolder(name: string, parentId: number | null): Promise<NoteFolder>;
+    renameFolder(id: number, name: string): Promise<void>; moveFolder(id: number, parentId: number | null): Promise<void>;
+    removeFolder(id: number): Promise<void>;
+  };
+  media: { save(bytes: Uint8Array, mime: string): Promise<string> };
+  search: { query(q: string, types?: SearchType[]): Promise<SearchHit[]> };
   trash: { list(): Promise<TrashItem[]>; restore(type: TrashItem['entity_type'], id: number): Promise<void>; purge(type: TrashItem['entity_type'], id: number): Promise<void>; empty(): Promise<void> };
   db: { checkIntegrity(): Promise<{ ok: boolean; message: string }> };
   onDataChanged(cb: (scope: string) => void): () => void;
+  onFlushRequest(cb: () => Promise<void>): void;
 }

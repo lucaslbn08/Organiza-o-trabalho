@@ -6,16 +6,19 @@ import { api, useQuery, useAutosave, fmtDateTime } from '../lib/api';
 import { useUi } from '../lib/ui';
 import { StatusSelect, PrioritySelect } from './TaskBits';
 
-export function TaskDetailPanel({ id, onClose }: { id: number; onClose: () => void }) {
+type NoteNav = { openNote: (id: number) => void; newNote: (taskId: number) => void };
+export function TaskDetailPanel({ id, onClose, openNote, newNote }: { id: number; onClose: () => void } & NoteNav) {
   const { data: t } = useQuery(() => api().tasks.get(id), [id]);
   if (!t) return <aside className="detail" />;
-  return <Editor key={t.id} t={t} onClose={onClose} />;
+  return <Editor key={t.id} t={t} onClose={onClose} openNote={openNote} newNote={newNote} />;
 }
 
-function Editor({ t, onClose }: { t: TD; onClose: () => void }) {
+function Editor({ t, onClose, openNote, newNote }: { t: TD; onClose: () => void } & NoteNav) {
   const ui = useUi();
   const { data: projects = [] } = useQuery(() => api().projects.list());
   const { data: categories = [] } = useQuery(() => api().categories.list());
+  const { data: notes = [] } = useQuery(() => api().notes.list({ task_id: t.id }), [t.id]);
+  const { data: allNotes = [] } = useQuery(() => api().notes.list({}));
   const [title, setTitle] = useState(t.title);
   const [desc, setDesc] = useState(t.description);
   const [tags, setTags] = useState(t.tags.map((g) => g.name).join(', '));
@@ -74,6 +77,23 @@ function Editor({ t, onClose }: { t: TD; onClose: () => void }) {
           </section>
         );
       })}
+
+      <section>
+        <h4>Notas associadas</h4>
+        {notes.map((n) => (
+          <div key={n.id} className="check-row">
+            <a href="#" onClick={(e) => { e.preventDefault(); openNote(n.id); }}>{n.title || 'Sem título'}</a>
+            <button className="icon ghost" title="Desvincular" onClick={() => ui.run(api().notes.unlinkTask(n.id, t.id))}><X size={12} /></button>
+          </div>
+        ))}
+        <div className="row">
+          <button className="btn" onClick={() => newNote(t.id)}><Plus size={14} /> Nova nota</button>
+          <select value="" onChange={(e) => e.target.value && ui.run(api().notes.linkTask(Number(e.target.value), t.id))}>
+            <option value="">Vincular nota existente…</option>
+            {allNotes.filter((n) => !notes.some((x) => x.id === n.id)).map((n) => <option key={n.id} value={n.id}>{n.title || 'Sem título'}</option>)}
+          </select>
+        </div>
+      </section>
 
       <section>
         <h4>Links e referências</h4>
