@@ -14,10 +14,10 @@
     "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.renderer.json --noEmit",
     "test": "vitest run",
     "rebuild:electron": "electron-builder install-app-deps",
-    "dist:win": "npm run build && electron-builder --win nsis --x64",
+    "dist:win": "npm run build && electron-builder --win nsis --x64 --publish never",
     "postinstall": "echo \"Para rodar no Electron execute: npm run rebuild:electron\"",
     "assets": "node scripts/copy-assets.mjs",
-    "dist:dir": "npm run build && electron-builder --win dir --x64",
+    "dist:dir": "npm run build && electron-builder --win dir --x64 --publish never",
     "test:e2e": "npm run build && node tests/e2e/electron.e2e.mjs"
   },
   "build": {
