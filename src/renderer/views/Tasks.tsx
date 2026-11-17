@@ -34,6 +34,7 @@ export function TasksView({ settings, onOpen, onQuickAdd, projectId }: { setting
   const [sort, setSort] = useState<TaskSort>('manual');
   const [grouped, setGrouped] = useState(false);
   const [newCat, setNewCat] = useState('');
+  const [limit, setLimit] = useState(200);
   const showCompleted = settings.showCompleted;
   const q = { search, statuses, priorities, sort, showCompleted, project_id: projectId };
   const { data: tasks = [] } = useQuery(() => api().tasks.list(q), [JSON.stringify(q)]);
@@ -49,7 +50,7 @@ export function TasksView({ settings, onOpen, onQuickAdd, projectId }: { setting
             <span className="dot" style={{ background: c.color }} />{c.name} <small>{tasks.filter((t) => t.category_id === c.id).length}</small></h3>,
           items: tasks.filter((t) => t.category_id === c.id),
         }))
-    : [{ key: 'all', header: null, items: tasks }];
+    : [{ key: 'all', header: null, items: tasks.slice(0, limit) }];
 
   return (
     <div className="view">
@@ -81,6 +82,7 @@ export function TasksView({ settings, onOpen, onQuickAdd, projectId }: { setting
             ui.run(api().tasks.reorder(ids, undefined, catId));
           }} />
       )}
+      {!grouped && tasks.length > limit && <button className="btn more-btn" onClick={() => setLimit(limit + 200)}>Mostrar mais ({tasks.length - limit} restantes)</button>}
       {grouped && (
         <div className="row" style={{ marginTop: 12 }}>
           <input placeholder="Nova categoria" value={newCat} onChange={(e) => setNewCat(e.target.value)}

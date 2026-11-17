@@ -10,7 +10,10 @@ import { HomeView } from './views/Home';
 import { TasksView } from './views/Tasks';
 import { KanbanView } from './views/Kanban';
 import { ProjectsView, ProjectDetailView } from './views/Projects';
-import { TrashView, HistoryView, SettingsView } from './views/Misc';
+import { TrashView, HistoryView } from './views/Misc';
+import { SettingsView } from './views/Settings';
+import { resolveShortcuts, comboFor, type ShortcutAction } from './lib/shortcuts';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { TaskDetailPanel } from './components/TaskDetail';
 import { QuickAdd } from './components/QuickAdd';
 import { CommandPalette, type Command } from './components/CommandPalette';
@@ -75,6 +78,8 @@ export function App() {
   }, [tabs, active, split]);
 
   useEffect(() => { api().onFlushRequest(flushAll); }, []);
+  // resultado de uma restauração aplicada na inicialização
+  useEffect(() => { api().backup.lastResult().then((r) => { if (r) ui.toast(r.message + (r.previousDir ? ` Dados anteriores guardados em: ${r.previousDir}` : ''), r.ok ? 'ok' : 'error'); }).catch(() => undefined); }, [ui]);
   useEffect(() => {
     if (!settings) return;
     const r = document.documentElement;
@@ -138,19 +143,24 @@ export function App() {
 
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
-      if (!e.ctrlKey) return;
-      const key = e.key.toLowerCase();
+      if (!e.ctrlKey && !e.altKey) return;
       const t = e.target as HTMLElement;
+      if (e.ctrlKey && e.key === 'Tab' && tabs) { e.preventDefault(); const i = tabs.findIndex((x) => x.id === active); setActive(tabs[(i + (e.shiftKey ? -1 : 1) + tabs.length) % tabs.length].id); return; }
+      if (t.closest?.('.kbd-btn')) return; // gravando um atalho nas configurações
+      const combo = [e.ctrlKey && 'Ctrl', e.altKey && 'Alt', e.shiftKey && 'Shift', e.key.length === 1 ? e.key.toUpperCase() : e.key].filter(Boolean).join('+').toUpperCase();
+      const action = settings ? resolveShortcuts(settings.shortcuts)[combo] : undefined;
+      if (!action) return;
       const typing = t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName);
-      if (key === 'tab' && tabs) { e.preventDefault(); const i = tabs.findIndex((x) => x.id === active); setActive(tabs[(i + (e.shiftKey ? -1 : 1) + tabs.length) % tabs.length].id); return; }
-      if (typing && key !== 'k' && key !== 'n') return; // Ctrl+B, Ctrl+1… pertencem ao editor quando se está digitando
-      if (key === 'k') { e.preventDefault(); setPalette(true); }
-      else if (key === 'n' && e.shiftKey) { e.preventDefault(); newNote(); }
-      else if (key === 'n') { e.preventDefault(); setQuick(true); }
-      else if (key === 't') { e.preventDefault(); openInNewTab('home'); }
-      else if (key === 'w') { e.preventDefault(); closeTab(active); }
-      else if (key === 'b' && settings) { e.preventDefault(); set({ sidebarCollapsed: !settings.sidebarCollapsed }); }
-      else if (['1', '2', '3', '4'].includes(key)) { e.preventDefault(); go(['home', 'tasks', 'kanban', 'projects'][Number(key) - 1]); }
+      // enquanto se digita, só atalhos globais "seguros"; Ctrl+B, Ctrl+1… pertencem ao editor
+      if (typing && !(['palette', 'quickTask', 'newNote', 'capture', 'newFloating'] as ShortcutAction[]).includes(action)) return;
+      e.preventDefault();
+      const run: Record<ShortcutAction, () => void> = {
+        palette: () => setPalette(true), quickTask: () => setQuick(true), newNote: () => void newNote(), newFloating: () => void newFloating(),
+        capture: () => setCapture(true), newTab: () => openInNewTab('home'), closeTab: () => closeTab(active),
+        sidebar: () => settings && set({ sidebarCollapsed: !settings.sidebarCollapsed }),
+        goHome: () => go('home'), goTasks: () => go('tasks'), goKanban: () => go('kanban'), goProjects: () => go('projects'), goAgenda: () => go('agenda'),
+      };
+      run[action]();
     };
     addEventListener('keydown', k); return () => removeEventListener('keydown', k);
   });
@@ -173,20 +183,21 @@ export function App() {
   const focusedView = (focusPane === 'split' && splitTab ? splitTab : activeTab).view;
 
   const commands: Command[] = [
-    { id: 'new-task', label: 'Criar tarefa', hint: 'Ctrl+N', run: () => setQuick(true) },
-    { id: 'new-note', label: 'Criar anotação', hint: 'Ctrl+Shift+N', run: () => newNote() },
-    { id: 'new-floating', label: 'Nova nota flutuante', run: newFloating },
+    { id: 'new-task', label: 'Criar tarefa', hint: comboFor(settings.shortcuts, 'quickTask'), run: () => setQuick(true) },
+    { id: 'new-note', label: 'Criar anotação', hint: comboFor(settings.shortcuts, 'newNote'), run: () => newNote() },
+    { id: 'new-floating', label: 'Nova nota flutuante', hint: comboFor(settings.shortcuts, 'newFloating'), run: newFloating },
+    { id: 'backup', label: 'Backup e restauração', run: () => { try { localStorage.setItem('settingsCat', 'data'); } catch { /* opcional */ } go('settings'); } },
     { id: 'new-drawing', label: 'Criar desenho', run: () => newCanvas('drawing') },
     { id: 'new-board', label: 'Criar quadro infinito', run: () => newCanvas('board') },
-    { id: 'capture', label: 'Capturar tela', run: () => setCapture(true) },
+    { id: 'capture', label: 'Capturar tela', hint: comboFor(settings.shortcuts, 'capture'), run: () => setCapture(true) },
     { id: 'attach', label: 'Adicionar arquivos à biblioteca', run: () => ui.run(api().files.pick('internal')).then(() => go('files')) },
-    { id: 'new-tab', label: 'Nova aba', hint: 'Ctrl+T', run: () => openInNewTab('home') },
+    { id: 'new-tab', label: 'Nova aba', hint: comboFor(settings.shortcuts, 'newTab'), run: () => openInNewTab('home') },
     { id: 'split-v', label: 'Dividir área de trabalho lado a lado', run: () => splitWith(newSplitTarget(), 'vertical') },
     { id: 'split-h', label: 'Dividir área de trabalho na horizontal', run: () => splitWith(newSplitTarget(), 'horizontal') },
     ...(split ? [{ id: 'unsplit', label: 'Fechar divisão', run: () => setSplit(null) }] : []),
     ...NAV.map((n) => ({ id: 'go-' + n.id, label: `Ir para ${n.label}`, run: () => go(n.id) })),
     { id: 'theme', label: `Alternar para tema ${settings.theme === 'dark' ? 'claro' : 'escuro'}`, run: () => set({ theme: settings.theme === 'dark' ? 'light' : 'dark' }) },
-    { id: 'sidebar', label: 'Recolher/expandir barra lateral', hint: 'Ctrl+B', run: () => set({ sidebarCollapsed: !settings.sidebarCollapsed }) },
+    { id: 'sidebar', label: 'Recolher/expandir barra lateral', hint: comboFor(settings.shortcuts, 'sidebar'), run: () => set({ sidebarCollapsed: !settings.sidebarCollapsed }) },
   ];
   function newSplitTarget() {
     const other = tabs!.find((t) => t.id !== active);
@@ -218,7 +229,7 @@ export function App() {
   const isFill = (t: AppTab) => FILL_VIEWS.has(t.view) || ((t.view === 'drawings' || t.view === 'boards') && !!settings.openCanvas[t.view === 'drawings' ? 'drawing' : 'board']);
   const pane = (t: AppTab, which: 'main' | 'split') => (
     <main key={which + t.id} className={`pane ${isFill(t) ? 'fill' : 'scroll'} ${split && focusPane === which ? 'focused' : ''}`} onMouseDownCapture={() => setFocusPane(which)}>
-      <Suspense fallback={<div className="loading">Carregando…</div>}>{renderView(t)}</Suspense>
+      <ErrorBoundary key={t.view + (t.arg ?? '')} label={t.view}><Suspense fallback={<div className="loading">Carregando…</div>}>{renderView(t)}</Suspense></ErrorBoundary>
     </main>
   );
   const navClick = (e: React.MouseEvent, id: string) => { if (e.ctrlKey || e.button === 1) openInNewTab(id); else go(id); };
@@ -290,7 +301,7 @@ export function App() {
           {openTask && (
             <div className="detail-wrap" style={{ width: panelW }}>
               <div className="resizer" onMouseDown={() => { resizing.current = true; }} title="Arraste para redimensionar" />
-              <TaskDetailPanel id={openTask} onClose={() => setOpenTask(null)} openNote={openNote} newNote={(tid) => newNote({ task_id: tid })} openCanvas={openCanvas} newCanvas={(k, tid) => newCanvas(k, { task_id: tid })} onOpenFile={setPreview} />
+              <ErrorBoundary key={openTask} label="tarefa"><TaskDetailPanel id={openTask} onClose={() => setOpenTask(null)} openNote={openNote} newNote={(tid) => newNote({ task_id: tid })} openCanvas={openCanvas} newCanvas={(k, tid) => newCanvas(k, { task_id: tid })} onOpenFile={setPreview} /></ErrorBoundary>
             </div>
           )}
         </div>

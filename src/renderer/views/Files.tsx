@@ -13,6 +13,7 @@ export function FilesView({ onPreview }: { onPreview: (id: number) => void }) {
   const [missingOnly, setMissingOnly] = useState(false);
   const [dropMode, setDropMode] = useState<'internal' | 'link'>('internal');
   const [over, setOver] = useState(false);
+  const [limit, setLimit] = useState(300);
   const q = { search: search || undefined, folder, missingOnly };
   const { data: files = [] } = useQuery(() => api().files.list(q), [JSON.stringify(q)]);
   const { data: all = [] } = useQuery(() => api().files.list({}));
@@ -65,7 +66,7 @@ export function FilesView({ onPreview }: { onPreview: (id: number) => void }) {
           <div className="toolbar"><div className="search"><Search size={14} /><input placeholder="Pesquisar por nome ou pasta…" value={search} onChange={(e) => setSearch(e.target.value)} /></div></div>
           {files.length === 0 ? <div className="empty">{all.length ? 'Nenhum arquivo encontrado.' : 'Nenhum arquivo ainda. Arraste arquivos do Windows para esta tela ou use os botões acima.'}</div> : (
             <table className="table files-table"><thead><tr><th>Nome</th><th>Tipo</th><th>Tamanho</th><th>Pasta</th><th>Vínculos</th><th>Adicionado</th><th /></tr></thead><tbody>
-              {files.map((f) => (
+              {files.slice(0, limit).map((f) => (
                 <tr key={f.id} className={`clickable ${f.missing ? 'missing' : ''}`} onDoubleClick={() => onPreview(f.id)} onContextMenu={(e) => ui.menu(e, menu(f))}>
                   <td><span className="row nowrap">{f.missing ? <FileWarning size={14} className="danger-text" /> : f.mode === 'internal' ? <Paperclip size={14} /> : <Link2 size={14} />}<span className="ellipsis" title={f.stored_path}>{f.name}</span></span></td>
                   <td><span className={`badge-mode ${f.mode}`}>{f.mode === 'internal' ? 'Biblioteca' : 'Vínculo'}</span>{f.missing && <small className="danger-text"> ausente</small>}</td>
@@ -80,6 +81,7 @@ export function FilesView({ onPreview }: { onPreview: (id: number) => void }) {
               ))}
             </tbody></table>
           )}
+          {files.length > limit && <button className="btn more-btn" onClick={() => setLimit(limit + 300)}>Mostrar mais ({files.length - limit})</button>}
         </section>
       </div>
     </div>

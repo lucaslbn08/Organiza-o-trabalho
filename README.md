@@ -1,167 +1,143 @@
 # Workspace
 
-Aplicativo de produtividade e organização pessoal para Windows 10/11 — offline, sem login, dados locais.
+Programa de produtividade e organização pessoal para **Windows 10 e 11**: tarefas, Kanban, anotações,
+desenhos, quadros infinitos, agenda, arquivos, capturas de tela, notas flutuantes e backup completo.
+Funciona **totalmente offline**, sem cadastro, login ou servidor. Interface em português do Brasil.
 
-> **Status: Etapas 1 a 4 concluídas.** As seções marcadas como “Etapa N” na barra lateral
-> ainda **não estão implementadas** e exibem uma tela informando isso. Veja [Roteiro](#roteiro).
+> **Status: versão 1.0.0 — Etapas 1 a 5 concluídas.** Veja o que foi verificado e as limitações conhecidas no fim deste arquivo.
 
-## O que já funciona
+## Funcionalidades
 
-### Etapa 1 — base
+| Área | Destaques |
+|---|---|
+| **Início** | contadores por status, prioritárias, prazos/atrasadas, notas, desenhos e quadros recentes; painéis arrastáveis e ocultáveis; adição rápida |
+| **Tarefas** | status, prioridade, categoria, projeto, prazo com horário, etiquetas, checklist, subtarefas com progresso, comentários, links, anexos, notas e desenhos associados, recorrência, histórico; duplicar, lixeira, reordenar, arrastar entre categorias, filtros, pesquisa, ordenação, exibir/ocultar concluídas |
+| **Kanban** | o mesmo registro das tarefas; arrastar muda o status; colunas personalizáveis; filtro por projeto |
+| **Anotações** | editor rico (títulos, listas, checklists, cores, destaque, links, tabelas, imagens/capturas coladas, código, separadores), pastas e subpastas, etiquetas, fixar, favoritas, várias abertas e lado a lado, salvamento automático, **histórico de versões**, pesquisa de texto completo |
+| **Desenhos** | lápis/pincel, borracha, linhas, setas, formas, texto, seleção, cores, espessura, zoom, grade, alinhamento, duplicação, imagens; **objetos editáveis**; exportação PNG/PDF; versões |
+| **Quadro infinito** | notas adesivas, caixas de texto, **cartões de tarefa interativos sincronizados**, cartões de anotação, checklists clicáveis, imagens, **PDFs como referência**, links para arquivos/quadros, conectores, agrupamentos, bloqueio, zoom pela roda; câmera e zoom restaurados; exportação ajustada ao conteúdo |
+| **Agenda** | dia, semana e mês; arrastar tarefa para outro dia; lembretes; notificações do Windows; central de notificações |
+| **Arquivos** | **copiar para a biblioteca interna** (entra no backup) ou **vincular o original**; arrastar do Windows; visualização de imagens, PDFs e texto; abrir no app padrão; pastas; detecção de ausentes; executáveis nunca são abertos |
+| **Captura de tela** | região, janela ou tela inteira → nota, tarefa, desenho, quadro ou área de transferência |
+| **Notas flutuantes** | janelas pequenas sobre outros programas, cor, minimizar, fixar, relacionar a tarefa, reabertas automaticamente |
+| **Projetos e espaços** | projetos com cor reunindo tarefas, notas, desenhos, quadros e arquivos; espaços de trabalho independentes |
+| **Pesquisa** | Ctrl+K: tarefas, notas (texto completo, sem acentos), projetos, etiquetas, desenhos, quadros e arquivos + paleta de comandos |
+| **Área de trabalho** | abas, divisão lado a lado/horizontal, sessão restaurada, atalhos personalizáveis, tema claro/escuro, cor, escala |
+| **Segurança dos dados** | SQLite com WAL + transações, migrações versionadas com backup preventivo, lixeira, histórico, **backup ZIP verificado**, restauração segura |
 
-- Electron + React + TypeScript + Vite, SQLite (better-sqlite3) com migrações versionadas.
-- **Tarefas**: criar, editar (salvamento automático), duplicar, lixeira/restaurar, reordenar por arrastar,
-  arrastar entre categorias, filtros por status/prioridade, pesquisa (título, descrição, etiquetas),
-  ordenação (manual, nome, criação, prazo, prioridade), recorrência (diária/semanal/mensal/anual),
-  checklist, subtarefas com progresso, comentários, links, histórico por tarefa, exibir/ocultar concluídas.
-- **Kanban**: mesmo registro das tarefas (sem duplicação), arrastar entre colunas muda o status,
-  reordenação, filtro por projeto, colunas personalizáveis (título, cor, visibilidade).
-- **Início**: contadores, prioritárias, prazos próximos e atrasadas, projetos recentes, atalhos;
-  painéis reorganizáveis por arrastar e ocultáveis.
-- **Projetos** (cor, descrição, tarefas do projeto), **espaços de trabalho** independentes.
-- **Pesquisa/paleta de comandos** (Ctrl+K) para tarefas, projetos e comandos.
-- **Histórico** global, **Lixeira** (restaurar, excluir definitivo com confirmação, esvaziar).
-- **Configurações**: tema escuro/claro, cor principal, escala, animações, espaço de trabalho,
-  pasta de dados, verificação de integridade, versão.
-- Sincronização imediata entre telas: toda alteração notifica o renderer (`data:changed`).
-- Restauração: tamanho/posição da janela, última seção, barra recolhida, preferências.
+Atalhos padrão (todos personalizáveis em Configurações → Interface): `Ctrl+K` pesquisa · `Ctrl+N` tarefa ·
+`Ctrl+Shift+N` anotação · `Ctrl+Shift+F` nota flutuante · `Ctrl+Shift+S` captura · `Ctrl+T`/`Ctrl+W` abas ·
+`Ctrl+Tab` próxima aba · `Ctrl+B` barra lateral · `Ctrl+1…5` navegação.
 
-### Etapa 2 — anotações e organização
+## Instalar (usuário)
 
-- **Editor rico** (TipTap/ProseMirror): negrito, itálico, sublinhado, tachado, títulos H1–H3, listas numeradas e
-  com marcadores, checklists interativos, cor do texto, destaque, links (Ctrl+clique abre no navegador),
-  tabelas (inserir/remover linhas e colunas, redimensionar), imagens (botão, **colar captura de tela**, arrastar),
-  blocos de código, citações, separadores, desfazer/refazer.
-- **Organização**: pastas e subpastas (criar, renomear, mover por arrastar, excluir sem perder notas),
-  categorias, etiquetas, fixar, favoritar, duplicar, filtros por pasta/favoritas/etiqueta.
-- **Várias notas abertas** em abas e **lado a lado**; as abas abertas são restauradas ao reabrir o app.
-- **Salvamento automático** (600 ms após parar de digitar) + gravação forçada de pendências ao fechar a janela.
-- **Histórico de versões**: versão automática a cada 10 min de edição, versão manual, pré-visualização e
-  restauração (o conteúdo atual é guardado antes de restaurar). Até 100 versões por nota.
-- **Vínculos**: nota ↔ tarefas (nos dois painéis), nota → projeto (aparece na página do projeto).
-- **Pesquisa de texto completo** (SQLite FTS5, ignora acentos, por prefixo) dentro das notas e na
-  **pesquisa universal Ctrl+K**, que agora cobre tarefas, anotações, projetos e etiquetas com filtros por tipo.
-- Notas na **lixeira** e no **histórico**; painel “Anotações recentes” no Início.
-- Imagens ficam no próprio banco (tabela `media`, deduplicadas por SHA-256) e são servidas pelo protocolo
-  interno somente leitura `ws-media://` — entram automaticamente no backup.
+Execute `Workspace-Setup-<versão>.exe`. A instalação é por usuário (não exige administrador) e permite escolher
+a pasta. O instalador não é assinado digitalmente: o Windows SmartScreen pode pedir “Mais informações → Executar assim mesmo”.
 
-### Etapa 3 — ferramentas visuais
+## Desenvolvimento
 
-Motor de desenho: **Excalidraw** (MIT, maduro, offline — fontes copiadas localmente por `npm run assets`).
-
-- **Desenhos e esboços**: lápis/pincel (traço livre com espessura), borracha, linha, seta, retângulo, losango,
-  elipse/círculo, texto, seleção, mover, redimensionar, cores, espessura, desfazer/refazer, zoom, grade,
-  alinhamento e distribuição, duplicação, agrupamento, bloqueio, camadas, imagens (inserir/colar captura).
-  O desenho é salvo **como objetos editáveis** (não como imagem final), com miniatura na galeria.
-- **Quadro infinito**: tudo acima + notas adesivas, caixas de texto, **cartões de tarefa interativos**,
-  **cartões de anotação**, checklists clicáveis (`☐/☑`), quadros/agrupamentos (frames), setas e conectores
-  ligados aos objetos, links para outros quadros, vários quadros independentes.
-  Roda do mouse aproxima/afasta (alternável para rolar); arrastar com espaço ou ferramenta mão move a tela.
-- **Sincronização**: o quadro guarda só a referência (`taskId`/`noteId`); título, status e prioridade vêm
-  sempre do registro. Marcar como concluída no painel do cartão reflete na lista e no Kanban, e vice-versa;
-  editar o texto do cartão renomeia a tarefa. Notas mostram título e trecho atualizados.
-- **Persistência**: posição, dimensões, conteúdo, cores, conexões, grupos, zoom e posição da câmera;
-  imagens na biblioteca interna (deduplicadas). Reabre exatamente como estava, inclusive o último quadro aberto.
-- **Exportação PNG ou PDF**, ajustada automaticamente ao conteúdo (ou só a seleção), 1×/2×/3×, com/sem fundo.
-  Gravação atômica no destino escolhido; trata falta de espaço em disco.
-- **Versões** (automática a cada 10 min de edição, manual, restaurar), duplicar, lixeira, histórico,
-  pesquisa pelo título e pelos textos do desenho (Ctrl+K), vínculos com tarefas, notas e projetos.
-
-### Etapa 4 — recursos avançados
-
-- **Arquivos e anexos** (seção *Arquivos* + painel em tarefas, notas, projetos e quadros):
-  - duas formas, claramente diferenciadas: **Copiar para a biblioteca interna** (`%APPDATA%\Workspace\files`,
-    deduplicada por SHA-256, cópia atômica, entra no backup) ou **Vincular o arquivo original** (só o caminho);
-  - arrastar arquivos do Windows para a tela, ou escolher pela janela do sistema;
-  - visualização interna de imagens, **PDFs (pdf.js, com páginas)** e texto; abrir com o aplicativo padrão;
-  - renomear identificação, pastas/subpastas, pesquisa (também no Ctrl+K), **detecção de arquivos ausentes**,
-    “Localizar arquivo…” para reapontar vínculos, “Incorporar à biblioteca” para copiar um vínculo;
-  - exclusão com confirmação; ao esvaziar a lixeira só cópias internas são apagadas — **originais externos nunca**;
-  - por segurança, executáveis/scripts (.exe, .bat, .ps1, .js, .lnk…) nunca são abertos, apenas exibidos na pasta.
-- **Quadro infinito**: PDFs como referência (imagem da 1ª página) e links para arquivos da biblioteca.
-- **Captura de tela** (ícone de câmera ou Ctrl+K): região selecionada, janela ou tela inteira (`desktopCapturer`);
-  enviar para nova anotação, anotação existente, tarefa (anexo), desenho, quadro, ou copiar para a área de transferência.
-- **Notas flutuantes**: janelas pequenas sem moldura, arrastáveis, redimensionáveis, com cor, minimizar,
-  **fixar sobre todos os aplicativos**, relacionar a uma tarefa; posição/tamanho salvos e reabertas automaticamente.
-- **Agenda** diária, semanal e mensal: tarefas por prazo (com horário opcional), arrastar para outro dia,
-  criar tarefa com duplo clique, lembretes (criar, adiar, dispensar).
-- **Lembretes e notificações**: dentro do app e pelas **notificações do Windows** (configurável); aviso
-  automático no dia do prazo; **central de notificações** (sino) com atrasadas, hoje, próximos 3 dias e lembretes.
-- **Área de trabalho**: **abas** independentes (Ctrl+T, Ctrl+W, Ctrl+Tab, Ctrl+clique/botão do meio para nova aba,
-  arrastar para reordenar) e **divisão lado a lado ou horizontal**; abas, divisão, notas e quadros abertos são
-  restaurados ao reabrir.
-
-Atalhos: `Ctrl+T` nova aba · `Ctrl+W` fechar aba · `Ctrl+Tab` próxima aba · `Ctrl+Shift+N` nova anotação · `Ctrl+K` pesquisa · `Ctrl+N` nova tarefa · `Ctrl+B` barra lateral · `Ctrl+1..4` navegação · `Esc` fecha painel.
-
-## Executar em desenvolvimento
-
-Requisitos: Node.js 20+ e (no Windows) as ferramentas de build do Visual Studio, caso o
-better-sqlite3 não encontre binário pré-compilado.
+Requisitos: **Node.js 20+** (testado com 22) e Git. Não é preciso compilar nada nativo: o `better-sqlite3` usa
+binários Node-API pré-compilados, válidos para Node e Electron.
 
 ```bash
 npm install
 ```
 
 ```bash
-npm run rebuild:electron
-```
-
-```bash
 npm run dev
 ```
 
-(`dev` e `build` executam `npm run assets`, que copia as fontes do editor de desenho para uso offline.)
+| Script | O que faz |
+|---|---|
+| `npm run dev` | Vite + Electron com recarga do renderer |
+| `npm run build` | compila processo principal (tsc) e interface (Vite) em `dist/` |
+| `npm run typecheck` | verificação de tipos dos dois lados |
+| `npm test` | testes automatizados (Vitest) das funções críticas |
+| `npm run test:e2e` | ponta a ponta no **Electron real** (Playwright): Testes 1 a 7 |
+| `npm run dist:win` | gera o instalador NSIS em `release/` |
+| `npm run dist:dir` | gera só a pasta `release/win-unpacked` (para testar sem instalar) |
 
-`rebuild:electron` compila o SQLite nativo para o Electron. Para rodar os testes (que usam o Node),
-recompile para o Node antes: `npm rebuild better-sqlite3`.
+No Linux, o teste de ponta a ponta precisa de um servidor X: `xvfb-run -a npm run test:e2e`.
 
-## Testes
+### Gerar o instalador
 
-```bash
-npm test
-```
-
-Cobrem: anexos (cópia/vínculo, dedup, ausentes, exclusão que preserva originais), lembretes, aviso de prazo, central, notas flutuantes persistidas, capturas inseridas em nota/quadro, migração v3→v4; Teste 3 (quadro com tarefa, nota, desenho livre, seta, imagem, grupos e câmera idênticos após reabrir), Teste 4 pela camada de dados do quadro, versões/lixeira/vínculos de desenhos, migração v2→v3; Teste 2 (nota com formatação, checklist, tabela e imagem preservada após reabrir), migração v1→v2
-com backup preventivo, pesquisa FTS sem acentos, versões, pastas, vínculos, lixeira de notas, mídia; Teste 1 (10 tarefas/status persistem após reabrir), Teste 4 (lista ↔ Kanban no mesmo registro),
-Teste 6 (reabrir/atualizar sem perder dados nem reaplicar migrações), Teste 7 (transação interrompida e
-processo encerrado sem `close()` preservam apenas dados confirmados), recorrência, duplicação, lixeira,
-filtros, ordenação, reordenação com filtros, migração transacional e recusa de banco mais novo.
-
-## Gerar instalador Windows
+No Windows:
 
 ```bash
 npm run dist:win
 ```
 
-Gera `release/Workspace Setup x.y.z.exe` (NSIS, por usuário, permite escolher a pasta).
-Execute no Windows (o módulo nativo precisa ser compilado para Windows).
+Saída: `release/Workspace-Setup-<versão>.exe`. Também é possível gerar a partir do Linux (requer `wine` para o
+passo do NSIS). Configuração em `package.json → build`; ícones em `build/`.
 
-## Onde ficam os dados / atualizações sem perda
+## Onde ficam os dados
+
+Tudo fica em `%APPDATA%\Workspace` — **separado da pasta de instalação**:
 
 | Item | Local |
 |---|---|
-| Programa | pasta de instalação (substituída a cada atualização) |
-| Banco | `%APPDATA%\Workspace\data\workspace.sqlite` (+ `-wal`) |
-| Backups preventivos de migração | `%APPDATA%\Workspace\backups\` |
-| Logs | `%APPDATA%\Workspace\logs\workspace.log` |
-| Biblioteca de arquivos | `%APPDATA%\Workspace\files\` |
+| Banco de dados (tarefas, notas, quadros, imagens, preferências, abas…) | `data\workspace.sqlite` (+ `-wal`) |
+| Biblioteca interna de arquivos | `files\` |
+| Backups preventivos de migração e cópias antes de restaurar | `backups\` |
+| Registro de erros técnicos | `logs\workspace.log` |
+| Dados substituídos por uma restauração (guardados, não apagados) | `dados-anteriores-<data>\` |
 
-O instalador está configurado com `deleteAppDataOnUninstall: false`. Para atualizar, basta instalar a
-versão nova por cima. Na abertura, o app: verifica `user_version` → se houver migrações pendentes,
-cria backup consistente (`db.backup`) → aplica cada migração em transação → verifica chaves estrangeiras
-→ registra em log. Se o banco for de versão mais nova que o programa, ele recusa abrir (sem alterar nada).
-Migrações publicadas nunca são editadas; mudanças sempre entram como nova versão em `src/main/db/migrations.ts`.
+Para uso portátil ou testes, a variável de ambiente `WORKSPACE_DATA_DIR` aponta para outra pasta.
 
-Documentação técnica: [docs/ARQUITETURA.md](docs/ARQUITETURA.md).
+## Atualizar sem perder dados
 
-## Roteiro
+1. Instale a versão nova **por cima** da atual (não é preciso desinstalar). O desinstalador também nunca apaga `%APPDATA%\Workspace`.
+2. Na primeira abertura o Workspace verifica a versão do banco; se houver migrações, **cria um backup preventivo**
+   (`backups\pre-migracao-v<N>-*.sqlite`), aplica cada migração em transação, valida a integridade e registra no log.
+3. Se algo falhar, nada é alterado e uma mensagem informa o problema; se o banco for de uma versão **mais nova**
+   que o programa, ele se recusa a abri-lo (sem modificar).
 
-| Etapa | Conteúdo | Status |
-|---|---|---|
-| 1 | Base, SQLite, interface, navegação, tarefas, Kanban, autosave | **Concluída** |
-| 2 | Editor de notas (rich text, versões), pastas, pesquisa em notas, lixeira de notas | **Concluída** |
-| 3 | Editor de desenhos, quadro infinito, conectores, tarefas/notas sincronizadas no quadro | **Concluída** |
-| 4 | Arquivos/anexos, captura de tela, notas flutuantes, agenda/lembretes, abas e painéis divididos | **Concluída** |
-| 5 | Backup ZIP (exportar/verificar/restaurar), otimizações, empacotamento final | Pendente |
+Para quem desenvolve: migrações ficam em `src/main/db/migrations.ts`, são **somente acrescentadas** (nunca editadas) e testadas
+(incluindo atualização a partir de cada versão anterior).
 
-Ainda **não** existe: atalhos personalizáveis e backup ZIP / restauração (Etapa 5).
+## Backup e restauração
+
+Configurações → **Dados e backup**. Detalhes técnicos em [docs/BACKUP.md](docs/BACKUP.md).
+
+- **Exportar**: escolha destino e nome; barra de progresso; o ZIP é gravado como `.parcial`, **verificado por completo**
+  e só então renomeado — a mensagem de sucesso aparece apenas após a verificação. Trata falta de espaço em disco.
+- **Verificar**: confere manifesto, versões, SHA-256 de cada arquivo e integridade do banco contido, sem alterar nada.
+- **Restaurar**: verifica, mostra o que será restaurado, pede confirmação, cria uma cópia de segurança dos dados atuais,
+  extrai com validação de caminhos e só troca os dados na reinicialização; qualquer falha mantém os dados anteriores.
+
+## Testes
+
+- `npm test` — 47 testes: tarefas, Kanban, notas, versões, pesquisa, desenhos/quadros, sincronização, anexos,
+  lembretes, notas flutuantes, capturas, migrações v1→v5, **backup/verificação/restauração** (inclusive adulteração,
+  zip slip, versão incompatível, queda de energia durante a troca e reversão), desempenho com milhares de itens.
+- `npm run test:e2e` — no Electron real: Testes 1 (tarefas), 2 (notas), 3 (quadro), 4 (sincronização), 5 (backup em
+  ambiente limpo), 6 (atualização sobre dados antigos) e 7 (encerramento abrupto), além de protocolo seguro, CSP,
+  fontes offline e janelas de notas flutuantes.
+
+## Estrutura e arquitetura
+
+Visão técnica, estrutura de pastas e modelo de dados: [docs/ARQUITETURA.md](docs/ARQUITETURA.md).
+
+## Dependências principais
+
+| Pacote | Uso |
+|---|---|
+| electron, electron-builder | aplicativo desktop e instalador NSIS |
+| react, vite, typescript | interface |
+| better-sqlite3 | banco SQLite local (transações, WAL, FTS5, backup online) |
+| zod | validação de toda entrada vinda da interface |
+| @tiptap/* | editor de anotações |
+| @excalidraw/excalidraw | desenhos e quadro infinito (MIT) |
+| @dnd-kit/* | arrastar e soltar (listas, Kanban) |
+| pdfjs-dist | visualização de PDFs |
+| jspdf | exportação PDF de desenhos/quadros |
+| yazl, yauzl | criação e leitura do backup ZIP |
+| lucide-react | ícones |
+| vitest, playwright | testes |
+
+## Limitações conhecidas
+
+- O instalador não tem assinatura digital (requer certificado de assinatura de código).
+- A verificação de atualizações consulta as *Releases* do repositório no GitHub apenas quando o usuário clica; a instalação da nova versão é manual.
+- Captura de tela, notificações do Windows e janelas de diálogo (abrir/salvar) dependem do sistema e não são exercitadas pelos testes automatizados; a lógica por trás deles é testada.
+- O editor de desenho declara uma CDN como fonte alternativa das fontes; o CSP a bloqueia (o app nunca acessa a rede) e as fontes locais são usadas. Isso gera avisos inofensivos no console de desenvolvedor.

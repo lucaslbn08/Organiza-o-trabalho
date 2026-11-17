@@ -74,10 +74,11 @@ export interface Settings {
   openCanvas: { drawing: number | null; board: number | null }; wheelZoom: boolean;
   notificationsEnabled: boolean; systemNotifications: boolean; dueReminderTime: string | null;
   tabs: AppTab[]; activeTab: string; split: { tabId: string; dir: 'vertical' | 'horizontal' } | null;
+  shortcuts: Record<string, string>;
 }
 export interface AppTab { id: string; view: string; arg?: number }
 
-export interface AppInfo { version: string; dbVersion: number; dataDir: string; platform: string; electron: string }
+export interface AppInfo { version: string; dbVersion: number; dataDir: string; platform: string; electron: string; os: string; memory: string; dbSize: number; filesSize: number; chrome: string; node: string }
 
 export interface NoteFolder { id: number; workspace_id: number; parent_id: number | null; name: string; position: number }
 export interface NoteSummary {
@@ -127,9 +128,24 @@ export interface FloatingNote {
 export interface CaptureSource { id: string; name: string; kind: 'screen' | 'window'; thumbnail: string }
 export type CaptureTarget = { type: 'clipboard' } | { type: 'new-note' } | { type: 'note' | 'task' | 'drawing' | 'board'; id: number };
 
+export interface BackupVerifyReport {
+  ok: boolean; errors: string[]; warnings: string[]; compatible: boolean; needsMigration: boolean; counts: Record<string, number>; totalSize: number;
+  manifest: { appVersion: string; dbVersion: number; createdAt: string; includeLinked: boolean; files: { path: string; size: number }[]; linkedNotIncluded: { id: number; name: string; path: string }[] } | null;
+}
+export interface BackupProgress { phase: string; done: number; total: number; detail?: string }
+export interface BackupLogEntry { id: number; kind: 'export' | 'safety' | 'restore'; path: string; size: number; verified: 0 | 1; details: string; created_at: string; exists: boolean }
+export interface LinkedSummary { count: number; totalSize: number; missing: number }
+
 /** API exposta ao renderer pelo preload (contextBridge). */
 export interface WorkspaceApi {
-  app: { info(): Promise<AppInfo>; openDataDir(): Promise<void> };
+  app: { info(): Promise<AppInfo>; openDataDir(): Promise<void>; checkUpdates(): Promise<{ current: string; latest: string | null; newer: boolean; url: string | null; error?: string }>; logError(msg: string): Promise<void> };
+  backup: {
+    chooseExport(): Promise<string | null>; export(dest: string, includeLinked: boolean): Promise<{ path: string; size: number; report: BackupVerifyReport }>;
+    chooseZip(): Promise<string | null>; verify(file: string): Promise<BackupVerifyReport>;
+    restore(file: string): Promise<{ report: BackupVerifyReport; safetyBackup: string }>; cancelPending(): Promise<void>; relaunch(): Promise<void>;
+    history(): Promise<BackupLogEntry[]>; lastResult(): Promise<{ ok: boolean; message: string; previousDir: string | null; at: string } | null>;
+    linkedSummary(): Promise<LinkedSummary>; openFolder(): Promise<void>; onProgress(cb: (p: BackupProgress) => void): () => void;
+  };
   settings: { get(): Promise<Settings>; set(patch: Partial<Settings>): Promise<Settings> };
   workspaces: { list(): Promise<Workspace[]>; create(name: string): Promise<Workspace> };
   projects: {

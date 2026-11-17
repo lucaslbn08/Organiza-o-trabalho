@@ -1,10 +1,31 @@
-import { BrowserWindow, screen, desktopCapturer, type Rectangle } from 'electron';
+import { BrowserWindow, screen, desktopCapturer, protocol, type Rectangle } from 'electron';
+import fs from 'node:fs';
 import path from 'node:path';
 import type { FloatingService } from './services/planning';
 import type { FloatingNote } from '../shared/types';
 import { log } from './logger';
 
-export const isTrustedUrl = (url: string) => url.startsWith(process.env.VITE_DEV_SERVER_URL ?? 'file://');
+/** Interface servida por um protocolo próprio e seguro (em vez de file://): permite fetch de fontes locais e CSP 'self'. */
+export const APP_ORIGIN = 'app://workspace';
+export const isTrustedUrl = (url: string) => (process.env.VITE_DEV_SERVER_URL ? url.startsWith(process.env.VITE_DEV_SERVER_URL) : url.startsWith(APP_ORIGIN + '/'));
+const MIME: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json',
+  '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.woff': 'font/woff', '.ttf': 'font/ttf', '.wasm': 'application/wasm', '.txt': 'text/plain',
+};
+export function registerAppProtocol(rendererDir: string): void {
+  const root = path.resolve(rendererDir);
+  protocol.handle('app', async (req) => {
+    const u = new URL(req.url);
+    if (u.host !== 'workspace') return new Response('não encontrado', { status: 404 });
+    const rel = decodeURIComponent(u.pathname === '/' ? '/index.html' : u.pathname);
+    const abs = path.resolve(root, '.' + rel);
+    if (!abs.startsWith(root + path.sep)) return new Response('proibido', { status: 403 });
+    try {
+      const data = await fs.promises.readFile(abs);
+      return new Response(data, { headers: { 'content-type': MIME[path.extname(abs).toLowerCase()] ?? 'application/octet-stream', 'cache-control': 'no-cache' } });
+    } catch { return new Response('não encontrado', { status: 404 }); }
+  });
+}
 
 /** Preferências seguras para TODAS as janelas: isolamento, sandbox, sem Node no renderer. */
 export function secureWebPreferences(): Electron.WebPreferences {
@@ -16,7 +37,7 @@ export function hardenWindow(win: BrowserWindow): void {
 }
 export function loadRenderer(win: BrowserWindow, hash = ''): void {
   if (process.env.VITE_DEV_SERVER_URL) void win.loadURL(process.env.VITE_DEV_SERVER_URL + (hash ? '#' + hash : ''));
-  else void win.loadFile(path.join(__dirname, '../../renderer/index.html'), { hash });
+  else void win.loadURL(`${APP_ORIGIN}/index.html${hash ? '#' + hash : ''}`);
 }
 
 /** Janelas de notas flutuantes: pequenas, sem moldura, opcionalmente sempre visíveis sobre outros aplicativos. */

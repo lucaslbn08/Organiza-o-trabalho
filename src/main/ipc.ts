@@ -1,4 +1,6 @@
-import { ipcMain, BrowserWindow, shell, dialog, clipboard, ClipboardItem } from 'electron';
+import { app, ipcMain, BrowserWindow, shell, dialog, clipboard, ClipboardItem, net } from 'electron';
+import os from 'node:os';
+import { exportBackup, verifyBackup, prepareRestore, cancelPendingRestore, RESULT_MARKER } from './backup/backup';
 import fs from 'node:fs';
 import path from 'node:path';
 import { CanvasService } from './services/canvases';
@@ -48,6 +50,7 @@ const settingsPatch = z.object({
   notificationsEnabled: z.boolean(), systemNotifications: z.boolean(), dueReminderTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable(),
   tabs: z.array(z.object({ id: z.string().max(40), view: z.string().max(40), arg: z.number().int().positive().optional() })).min(1).max(20),
   activeTab: z.string().max(40), split: z.object({ tabId: z.string().max(40), dir: z.enum(['vertical', 'horizontal']) }).nullable(),
+  shortcuts: z.record(z.string().max(40), z.string().max(40)),
 }).partial();
 const trashType = z.enum(['task', 'project', 'note', 'canvas', 'attachment']);
 const sceneJson = z.string().max(200_000_000);
@@ -62,7 +65,7 @@ const notePatch = z.object({
   favorite: z.boolean().optional(), tags: z.array(z.string().max(60)).max(50).optional(),
 });
 
-export interface IpcContext { filesDir: string; mainWindow: () => BrowserWindow | null; media: MediaService; db: DB; dataDir: string; version: string; ws: () => number; setWs: (n: number) => void }
+export interface IpcContext { backupsDir: string; tmpDir: string; dbFile: string; beforeRelaunch: () => void; filesDir: string; mainWindow: () => BrowserWindow | null; media: MediaService; db: DB; dataDir: string; version: string; ws: () => number; setWs: (n: number) => void }
 
 export function registerIpc(ctx: IpcContext): { planning: PlanningService; sticky: StickyManager; settings: SettingsService } {
   const tasks = new TaskService(ctx.db, ctx.ws);
@@ -96,10 +99,29 @@ export function registerIpc(ctx: IpcContext): { planning: PlanningService; stick
     });
   }
 
+  const dirSize = (d: string): number => { try { return fs.readdirSync(d, { withFileTypes: true }).reduce((s, e) => s + (e.isDirectory() ? dirSize(path.join(d, e.name)) : fs.statSync(path.join(d, e.name)).size), 0); } catch { return 0; } };
   handle('app:info', [], () => ({
     version: ctx.version, dbVersion: getUserVersion(ctx.db), dataDir: ctx.dataDir,
-    platform: `${process.platform} ${process.arch}`, electron: process.versions.electron,
+    platform: `${process.platform} ${process.arch}`, electron: process.versions.electron, chrome: process.versions.chrome, node: process.versions.node,
+    os: `${os.type()} ${os.release()}`, memory: `${Math.round(os.totalmem() / 1073741824)} GB`,
+    dbSize: [ctx.dbFile, ctx.dbFile + '-wal'].reduce((s, f) => s + (fs.existsSync(f) ? fs.statSync(f).size : 0), 0), filesSize: dirSize(ctx.filesDir),
   }));
+  // verificação de atualização: opcional, só quando o usuário pede; sem internet o app continua normal
+  handle('app:checkUpdates', [], async () => {
+    const current = ctx.version;
+    try {
+      const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 8000);
+      const r = await net.fetch('https://api.github.com/repos/lucaslbn08/Organiza-o-trabalho/releases/latest', { signal: ctrl.signal, headers: { accept: 'application/vnd.github+json' } });
+      clearTimeout(t);
+      if (r.status === 404) return { current, latest: null, newer: false, url: null, error: 'Nenhuma versão publicada ainda.' };
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const j = await r.json() as { tag_name: string; html_url: string };
+      const latest = j.tag_name.replace(/^v/, '');
+      const cmp = (a: string, b: string) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) - (y[i] || 0); return 0; };
+      return { current, latest, newer: cmp(latest, current) > 0, url: j.html_url };
+    } catch (e) { return { current, latest: null, newer: false, url: null, error: 'Não foi possível verificar (sem conexão?): ' + (e as Error).message }; }
+  });
+  handle('app:logError', [z.string().max(20000)], (m) => { log('error', 'Renderer: ' + m); });
   handle('app:openDataDir', [], () => shell.openPath(ctx.dataDir).then(() => undefined));
 
   handle('settings:get', [], () => settings.get());
@@ -275,6 +297,62 @@ export function registerIpc(ctx: IpcContext): { planning: PlanningService; stick
       default: insertImageIntoCanvas(canvases, ctx.media, t.id, png, width, height); notify('canvases'); return `Captura inserida no ${t.type === 'board' ? 'quadro' : 'desenho'}.`;
     }
   });
+
+  // ---------- backup e restauração ----------
+  const progress = (p: unknown) => BrowserWindow.getAllWindows().forEach((w) => w.webContents.send('backup:progress', p));
+  const logBackup = (kind: 'export' | 'safety' | 'restore', file: string, size: number, verified: boolean, details: string) =>
+    ctx.db.prepare('INSERT INTO backup_log (kind, path, size, verified, details) VALUES (?,?,?,?,?)').run(kind, file, size, verified ? 1 : 0, details);
+  const stamp = () => new Date().toISOString().slice(0, 16).replace('T', '_').replace(':', 'h');
+  let busy = false;
+  const exclusive = async <T>(fn: () => Promise<T>): Promise<T> => {
+    if (busy) throw new Error('Já existe uma operação de backup em andamento.');
+    busy = true; try { return await fn(); } finally { busy = false; }
+  };
+  handle('backup:chooseExport', [], async () => {
+    const win = BrowserWindow.getFocusedWindow();
+    const opts: Electron.SaveDialogOptions = { title: 'Salvar backup completo', defaultPath: path.join(app.getPath('documents'), `Workspace-backup-${stamp()}.zip`), filters: [{ name: 'Backup do Workspace (ZIP)', extensions: ['zip'] }] };
+    const r = win ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts);
+    if (r.canceled || !r.filePath) return null;
+    return r.filePath.toLowerCase().endsWith('.zip') ? r.filePath : r.filePath + '.zip';
+  });
+  handle('backup:export', [z.string().max(4000).refine((p) => path.isAbsolute(p) && p.toLowerCase().endsWith('.zip')), z.boolean()], (dest, includeLinked) => exclusive(async () => {
+    const r = await exportBackup({ db: ctx.db, filesDir: ctx.filesDir, tmpDir: ctx.tmpDir, dest, appVersion: ctx.version, includeLinked, onProgress: progress });
+    logBackup('export', r.path, r.size, true, JSON.stringify(r.manifest.counts));
+    return { path: r.path, size: r.size, report: r.report };
+  }), 'backup');
+  handle('backup:chooseZip', [], async () => {
+    const win = BrowserWindow.getFocusedWindow();
+    const opts: Electron.OpenDialogOptions = { title: 'Escolher backup do Workspace', defaultPath: ctx.backupsDir, properties: ['openFile'], filters: [{ name: 'Backup do Workspace (ZIP)', extensions: ['zip'] }] };
+    const r = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
+    return r.canceled ? null : r.filePaths[0] ?? null;
+  });
+  handle('backup:verify', [z.string().max(4000)], (f) => exclusive(() => verifyBackup(f, ctx.tmpDir)));
+  handle('backup:restore', [z.string().max(4000)], (f) => exclusive(async () => {
+    // 1) cópia de segurança dos dados atuais (verificada) antes de qualquer alteração
+    fs.mkdirSync(ctx.backupsDir, { recursive: true });
+    const safety = path.join(ctx.backupsDir, `antes-da-restauracao-${stamp()}.zip`);
+    const s = await exportBackup({ db: ctx.db, filesDir: ctx.filesDir, tmpDir: ctx.tmpDir, dest: safety, appVersion: ctx.version, includeLinked: false, onProgress: progress });
+    logBackup('safety', s.path, s.size, true, 'Cópia automática antes de restaurar ' + path.basename(f));
+    // 2) preparação isolada; a troca é feita na reinicialização
+    const r = await prepareRestore({ zip: f, dataDir: ctx.dataDir, safetyBackup: safety, onProgress: progress });
+    logBackup('restore', f, fs.statSync(f).size, true, 'Preparada; será aplicada ao reiniciar');
+    return { report: r.report, safetyBackup: safety };
+  }));
+  handle('backup:cancelPending', [], () => cancelPendingRestore(ctx.dataDir));
+  handle('backup:relaunch', [], () => { ctx.beforeRelaunch(); app.relaunch(); app.exit(0); });
+  handle('backup:history', [], () => (ctx.db.prepare('SELECT * FROM backup_log ORDER BY id DESC LIMIT 100').all() as { path: string }[]).map((b) => ({ ...b, exists: fs.existsSync(b.path) })));
+  handle('backup:lastResult', [], () => {
+    const f = path.join(ctx.dataDir, RESULT_MARKER);
+    if (!fs.existsSync(f)) return null;
+    try { return JSON.parse(fs.readFileSync(f, 'utf8')); } finally { fs.rmSync(f, { force: true }); }
+  });
+  handle('backup:linkedSummary', [], () => {
+    const rows = ctx.db.prepare("SELECT stored_path FROM attachments WHERE mode = 'link' AND deleted_at IS NULL").all() as { stored_path: string }[];
+    let totalSize = 0, missing = 0;
+    for (const r of rows) { try { totalSize += fs.statSync(r.stored_path).size; } catch { missing++; } }
+    return { count: rows.length, totalSize, missing };
+  });
+  handle('backup:openFolder', [], async () => { fs.mkdirSync(ctx.backupsDir, { recursive: true }); await shell.openPath(ctx.backupsDir); });
 
   handle('db:checkIntegrity', [], () => checkIntegrity(ctx.db));
   return { planning, sticky, settings };

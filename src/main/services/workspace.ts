@@ -15,7 +15,7 @@ export const DEFAULT_SETTINGS: Settings = {
   dashboardPanels: ['stats', 'priority', 'dueSoon', 'notes', 'drawings', 'boards', 'projects', 'shortcuts'].map((id) => ({ id, visible: true })),
   lastView: 'home', activeWorkspaceId: 1, openNotes: [], activeNote: null, openCanvas: { drawing: null, board: null }, wheelZoom: true,
   notificationsEnabled: true, systemNotifications: true, dueReminderTime: '09:00',
-  tabs: [{ id: 't1', view: 'home' }], activeTab: 't1', split: null,
+  tabs: [{ id: 't1', view: 'home' }], activeTab: 't1', split: null, shortcuts: {},
 };
 
 export class SettingsService {

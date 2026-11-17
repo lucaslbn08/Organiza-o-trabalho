@@ -11,12 +11,12 @@ import { PlanningService, FloatingService } from '../src/main/services/planning'
 
 export function tmpDir(): string { return fs.mkdtempSync(path.join(os.tmpdir(), 'ws-test-')); }
 
-export async function openApp(file: string) {
+export async function openApp(file: string, filesDirOverride?: string) {
   const db: DB = openDatabase(file);
   const report = await migrate(db, path.join(path.dirname(file), 'backups'));
   const ws = () => 1;
   const notes = new NoteService(db, ws); const tasks = new TaskService(db, ws); const canvases = new CanvasService(db, ws);
-  const filesDir = path.join(file === ':memory:' ? tmpDir() : path.dirname(file), 'files');
+  const filesDir = filesDirOverride ?? path.join(file === ':memory:' ? tmpDir() : path.dirname(file), 'files');
   const attachments = new AttachmentService(db, ws, filesDir);
   const svc = { tasks, notes, canvases, attachments };
   const planning = new PlanningService(db, ws, tasks); const floating = new FloatingService(db, ws);

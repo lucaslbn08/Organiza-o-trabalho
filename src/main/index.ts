@@ -1,14 +1,22 @@
 import { app, BrowserWindow, dialog, screen, protocol, ipcMain, Notification } from 'electron';
-import { secureWebPreferences, hardenWindow, loadRenderer } from './windows';
+import { secureWebPreferences, hardenWindow, loadRenderer, registerAppProtocol } from './windows';
 import path from 'node:path';
 import { openDatabase, migrate, checkIntegrity, type DB } from './db/connection';
 import { registerIpc } from './ipc';
 import { initLogger, log } from './logger';
 import { SettingsService } from './services/workspace';
 import { MediaService } from './services/notes';
+import { applyPendingRestore } from './backup/backup';
+import fs from 'node:fs';
 
 // imagens das notas: ws-media://<sha256>, servidas do banco (somente leitura)
-protocol.registerSchemesAsPrivileged([{ scheme: 'ws-media', privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } },
+  { scheme: 'ws-media', privileges: { standard: true, secure: true, supportFetchAPI: true } },
+]);
+
+// Pasta de dados alternativa (uso portátil ou testes automatizados). Padrão: %APPDATA%\Workspace.
+if (process.env.WORKSPACE_DATA_DIR) app.setPath('userData', path.resolve(process.env.WORKSPACE_DATA_DIR));
 
 /**
  * Dados do usuário ficam em %APPDATA%\Workspace (app.getPath('userData')),
@@ -20,6 +28,7 @@ const paths = {
   backups: path.join(dataDir, 'backups'),
   logs: path.join(dataDir, 'logs'),
   files: path.join(dataDir, 'files'),
+  tmp: path.join(dataDir, 'tmp'),
   windowState: 'window',
 };
 
@@ -61,6 +70,7 @@ function createWindow(): void {
   mainWindow = new BrowserWindow({
     x: st.x, y: st.y, width: st.width, height: st.height, minWidth: 900, minHeight: 600,
     show: false, backgroundColor: '#0f1115', title: 'Workspace', autoHideMenuBar: true,
+    icon: path.join(__dirname, '../../renderer/icon.png'),
     webPreferences: secureWebPreferences(),
   });
   if (st.maximized) mainWindow.maximize();
@@ -88,6 +98,16 @@ function createWindow(): void {
 async function bootstrap(): Promise<void> {
   initLogger(paths.logs);
   log('info', `Iniciando Workspace ${app.getVersion()} — dados em ${dataDir}`);
+  // restauração preparada antes de reiniciar (ou interrompida): aplicada/desfeita antes de abrir o banco
+  try {
+    const rr = applyPendingRestore(dataDir);
+    if (rr) log(rr.ok ? 'info' : 'error', 'Restauração: ' + rr.message);
+  } catch (e) { log('error', 'Falha ao aplicar restauração pendente', e); }
+  // limpeza de temporários de execuções anteriores (nunca toca em data/, files/ ou backups/)
+  try {
+    fs.rmSync(paths.tmp, { recursive: true, force: true });
+    for (const d of fs.readdirSync(dataDir)) if (d.startsWith('restauracao-preparo-') && !fs.existsSync(path.join(dataDir, 'restauracao-pendente.json'))) fs.rmSync(path.join(dataDir, d), { recursive: true, force: true });
+  } catch { /* opcional */ }
   try {
     db = openDatabase(paths.db);
     const integ = checkIntegrity(db);
@@ -103,13 +123,15 @@ async function bootstrap(): Promise<void> {
   }
   let ws = new SettingsService(db).get().activeWorkspaceId || 1;
   const media = new MediaService(db);
+  registerAppProtocol(path.join(__dirname, '../../renderer'));
   protocol.handle('ws-media', (req) => {
     const m = media.get(new URL(req.url).hostname);
     return m ? new Response(new Uint8Array(m.data), { headers: { 'content-type': m.mime, 'cache-control': 'max-age=31536000, immutable' } }) : new Response('não encontrado', { status: 404 });
   });
-  const ipc = registerIpc({ filesDir: paths.files, mainWindow: () => mainWindow, media, db, dataDir, version: app.getVersion(), ws: () => ws, setWs: (n) => { ws = n; } });
+  const ipc = registerIpc({ backupsDir: paths.backups, tmpDir: paths.tmp, dbFile: paths.db, beforeRelaunch: () => { onQuit?.(); try { db?.pragma('wal_checkpoint(TRUNCATE)'); db?.close(); db = null; } catch { /* já fechado */ } }, filesDir: paths.files, mainWindow: () => mainWindow, media, db, dataDir, version: app.getVersion(), ws: () => ws, setWs: (n) => { ws = n; } });
   createWindow();
-  ipc.sticky.restoreOpen();
+  // notas flutuantes reabrem depois da janela principal estar pronta
+  mainWindow?.once('ready-to-show', () => ipc.sticky.restoreOpen());
   onQuit = () => ipc.sticky.closeAllForQuit();
   startScheduler(ipc);
 }

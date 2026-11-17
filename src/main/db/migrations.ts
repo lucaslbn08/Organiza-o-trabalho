@@ -269,6 +269,21 @@ CREATE TABLE floating_notes (
 );
 `,
   },
+  {
+    version: 5,
+    name: 'histórico de backups',
+    up: `
+CREATE TABLE backup_log (
+  id INTEGER PRIMARY KEY,
+  kind TEXT NOT NULL CHECK (kind IN ('export','safety','restore')),
+  path TEXT NOT NULL,
+  size INTEGER NOT NULL DEFAULT 0,
+  verified INTEGER NOT NULL DEFAULT 0 CHECK (verified IN (0,1)),
+  details TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+`,
+  },
 ];
 
 export const LATEST_DB_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

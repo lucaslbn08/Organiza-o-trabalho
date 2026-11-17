@@ -17,6 +17,7 @@ export function NotesView({ settings, openNote, closeNote, onOpenTask, openCanva
   const [search, setSearch] = useState('');
   const [split, setSplit] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
+  const [limit, setLimit] = useState(150);
   const q: NoteQuery = { search: search || undefined };
   if (filter.kind === 'fav') q.favorites = true;
   if (filter.kind === 'root') q.folder_id = null;
@@ -88,7 +89,7 @@ export function NotesView({ settings, openNote, closeNote, onOpenTask, openCanva
         <div className="search"><Search size={14} /><input placeholder="Pesquisar no conteúdo das notas…" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
         <div className="list-scroll">
           {notes.length === 0 && <div className="empty small">Nenhuma anotação. <button className="link" onClick={create}>Criar</button></div>}
-          {notes.map((n) => (
+          {notes.slice(0, limit).map((n) => (
             <div key={n.id} className={`note-item ${n.id === active ? 'active' : ''}`} draggable onDragStart={(e) => e.dataTransfer.setData('note', String(n.id))}
               onClick={() => openNote(n.id)} onContextMenu={(e) => ui.menu(e, [
                 { label: 'Abrir', onClick: () => openNote(n.id) },
@@ -103,6 +104,7 @@ export function NotesView({ settings, openNote, closeNote, onOpenTask, openCanva
               <small className="muted">{fmtDateTime(n.updated_at)}{n.tags.map((t) => ` #${t.name}`).join('')}</small>
             </div>
           ))}
+          {notes.length > limit && <button className="btn more-btn" onClick={() => setLimit(limit + 150)}>Mostrar mais ({notes.length - limit})</button>}
         </div>
       </section>
 

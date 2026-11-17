@@ -44,7 +44,8 @@ src/
     services/attachments.ts biblioteca de arquivos (cópia com hash, vínculos, ausentes, exclusão segura)
     services/planning.ts   agenda, lembretes, central de notificações, notas flutuantes
     services/capture.ts    inserir capturas em notas e quadros
-  main/windows.ts          janelas seguras: notas flutuantes, captura de tela
+  main/windows.ts          janelas seguras, protocolo app://, notas flutuantes, captura de tela
+  main/backup/backup.ts    backup ZIP, verificação, restauração em duas fases
   preload/index.ts         ponte segura
   renderer/
     App.tsx                shell: barra lateral, barra superior, atalhos, painel de detalhes
@@ -53,6 +54,9 @@ src/
     lib/                   api/hooks, UI (toasts, confirmação, menu de contexto)
     styles/app.css         tokens de tema claro/escuro
 tests/                     testes Vitest das funções críticas
+tests/e2e/                 testes de ponta a ponta no Electron real (Playwright)
+build/                     ícones do aplicativo/instalador
+scripts/                   cópia das fontes do editor para uso offline
 ```
 
 ## Modelo de dados (v1)
@@ -81,6 +85,7 @@ tests/                     testes Vitest das funções críticas
 | `reminders`, `notification_log` | lembretes e controle de avisos de prazo já enviados — v4 |
 | `floating_notes` | notas flutuantes: conteúdo, cor, posição, tamanho, fixação, aberta/fechada — v4 |
 | `tasks.due_time` | horário opcional do prazo — v4 |
+| `backup_log` | histórico de exportações, cópias de segurança e restaurações — v5 |
 | `canvas_links` | vínculos desenho/quadro ↔ tarefa/nota (limpos por gatilho ao excluir o alvo) — v3 |
 
 Todas as FKs têm `ON DELETE` explícito; exclusão de usuário é sempre lógica (`deleted_at`) até a lixeira
@@ -102,6 +107,16 @@ Um cartão de tarefa é um retângulo com `customData = { kind: 'task', taskId }
 Ao abrir o quadro e a cada `data:changed` de tarefas/notas, o editor busca os dados atuais (`briefs:*`) e
 reescreve texto/cores dos cartões fora do histórico de desfazer. O painel de seleção altera o registro real
 (`tasks:update`). Os vínculos `canvas_links` do quadro são derivados dos cartões presentes a cada gravação.
+
+## Protocolos
+
+- `app://workspace/` serve a interface (em produção) a partir de `dist/renderer`, com validação de caminho. Diferente de
+  `file://`, permite `fetch` de recursos locais (fontes do editor) e um CSP `'self'` restrito.
+- `ws-media://<sha256>` serve imagens guardadas no banco (somente leitura).
+
+## Backup
+
+Ver [BACKUP.md](BACKUP.md). Código em `src/main/backup/backup.ts`.
 
 ## Janelas
 

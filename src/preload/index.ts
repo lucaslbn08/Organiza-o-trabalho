@@ -4,7 +4,15 @@ import type { WorkspaceApi } from '../shared/types';
 const call = (ch: string) => (...args: unknown[]) => ipcRenderer.invoke(ch, ...args);
 
 const api: WorkspaceApi = {
-  app: { info: call('app:info'), openDataDir: call('app:openDataDir') } as WorkspaceApi['app'],
+  app: { info: call('app:info'), openDataDir: call('app:openDataDir'), checkUpdates: call('app:checkUpdates'), logError: call('app:logError') } as WorkspaceApi['app'],
+  backup: {
+    chooseExport: call('backup:chooseExport'), export: call('backup:export'), chooseZip: call('backup:chooseZip'), verify: call('backup:verify'),
+    restore: call('backup:restore'), cancelPending: call('backup:cancelPending'), relaunch: call('backup:relaunch'), history: call('backup:history'),
+    lastResult: call('backup:lastResult'), linkedSummary: call('backup:linkedSummary'), openFolder: call('backup:openFolder'),
+    onProgress(cb: (p: Parameters<Parameters<WorkspaceApi['backup']['onProgress']>[0]>[0]) => void) {
+      const l = (_: unknown, p: Parameters<typeof cb>[0]) => cb(p); ipcRenderer.on('backup:progress', l); return () => ipcRenderer.removeListener('backup:progress', l);
+    },
+  } as WorkspaceApi['backup'],
   settings: { get: call('settings:get'), set: call('settings:set') } as WorkspaceApi['settings'],
   workspaces: { list: call('workspaces:list'), create: call('workspaces:create') } as WorkspaceApi['workspaces'],
   projects: { list: call('projects:list'), create: call('projects:create'), update: call('projects:update'), remove: call('projects:remove') } as WorkspaceApi['projects'],

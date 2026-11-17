@@ -1,8 +1,8 @@
 {
   "name": "workspace",
   "productName": "Workspace",
-  "version": "0.4.0",
-  "description": "Workspace — organização pessoal offline para Windows",
+  "version": "1.0.0",
+  "description": "Workspace — organização pessoal offline para Windows: tarefas, Kanban, anotações, desenhos, quadros infinitos, agenda, arquivos e backup.",
   "main": "dist/main/main/index.js",
   "license": "UNLICENSED",
   "private": true,
@@ -14,32 +14,66 @@
     "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.renderer.json --noEmit",
     "test": "vitest run",
     "rebuild:electron": "electron-builder install-app-deps",
-    "dist:win": "npm run build && electron-builder --win nsis",
+    "dist:win": "npm run build && electron-builder --win nsis --x64",
     "postinstall": "echo \"Para rodar no Electron execute: npm run rebuild:electron\"",
-    "assets": "node scripts/copy-assets.mjs"
+    "assets": "node scripts/copy-assets.mjs",
+    "dist:dir": "npm run build && electron-builder --win dir --x64",
+    "test:e2e": "npm run build && node tests/e2e/electron.e2e.mjs"
   },
   "build": {
     "appId": "br.local.workspace",
     "productName": "Workspace",
+    "copyright": "Uso pessoal",
     "directories": {
-      "output": "release"
+      "output": "release",
+      "buildResources": "build"
     },
     "files": [
       "dist/**/*",
-      "package.json"
+      "package.json",
+      "!**/*.map",
+      "!node_modules/better-sqlite3/{deps,src,binding.gyp}/**",
+      "!node_modules/better-sqlite3/deps",
+      "!node_modules/better-sqlite3/src",
+      "!node_modules/better-sqlite3/prebuilds/{linux,linuxmusl,darwin}-*.node"
     ],
+    "asarUnpack": [
+      "**/*.node"
+    ],
+    "npmRebuild": false,
     "win": {
-      "target": "nsis"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "Workspace-Setup-${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "deleteAppDataOnUninstall": false,
-      "perMachine": false
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Workspace",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "language": "1046",
+      "installerLanguages": [
+        "pt_BR"
+      ],
+      "runAfterFinish": true
     }
   },
   "dependencies": {
     "better-sqlite3": "^13.2.0",
+    "yauzl": "^3.4.0",
+    "yazl": "^3.3.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {
@@ -59,6 +93,8 @@
     "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@types/yauzl": "^3.4.0",
+    "@types/yazl": "^3.3.1",
     "@vitejs/plugin-react": "^6.3.0",
     "concurrently": "^10.0.7",
     "cross-env": "^10.1.0",
@@ -67,11 +103,15 @@
     "jspdf": "^4.2.1",
     "lucide-react": "^1.74.0",
     "pdfjs-dist": "^6.5.438",
+    "playwright": "^1.63.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "typescript": "^7.0.2",
     "vite": "^8.3.8",
     "vitest": "^5.1.0",
     "wait-on": "^9.5.1"
+  },
+  "author": {
+    "name": "Workspace"
   }
 }

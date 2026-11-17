@@ -1,7 +1,5 @@
 import type { TaskBrief, TaskStatus, TaskPriority, NoteBrief } from '../../shared/types';
 
-// Fontes servidas localmente (copiadas por scripts/copy-assets.mjs). URL absoluta: funciona em file:// no Electron.
-(window as unknown as { EXCALIDRAW_ASSET_PATH: string }).EXCALIDRAW_ASSET_PATH = new URL('./', window.location.href).href;
 
 export async function dataUrlToBytes(dataURL: string): Promise<{ bytes: Uint8Array; mime: string }> {
   const m = /^data:([^;,]+)[^,]*,/.exec(dataURL);
