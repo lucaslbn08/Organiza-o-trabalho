@@ -11,9 +11,9 @@ const LABEL: Record<CanvasKind, { title: string; one: string; empty: string }> =
   board: { title: 'Quadros infinitos', one: 'Novo quadro', empty: 'Nenhum quadro ainda.' },
 };
 
-export function CanvasesView({ kind, settings, openId, setOpen, onOpenTask, onOpenNote, onOpenBoard }: {
+export function CanvasesView({ kind, settings, openId, setOpen, onOpenTask, onOpenNote, onOpenBoard, onOpenFile }: {
   kind: CanvasKind; settings: Settings; openId: number | null; setOpen: (id: number | null) => void;
-  onOpenTask: (id: number) => void; onOpenNote: (id: number) => void; onOpenBoard: (id: number) => void;
+  onOpenTask: (id: number) => void; onOpenNote: (id: number) => void; onOpenBoard: (id: number) => void; onOpenFile: (id: number) => void;
 }) {
   const ui = useUi();
   const [search, setSearch] = useState('');
@@ -21,7 +21,7 @@ export function CanvasesView({ kind, settings, openId, setOpen, onOpenTask, onOp
   const L = LABEL[kind];
   const create = async () => { const c = await ui.run(api().canvases.create({ kind })); if (c) setOpen(c.id); };
 
-  if (openId) return <CanvasEditor id={openId} settings={settings} onClose={() => setOpen(null)} onOpenTask={onOpenTask} onOpenNote={onOpenNote} onOpenBoard={onOpenBoard} />;
+  if (openId) return <CanvasEditor id={openId} settings={settings} onClose={() => setOpen(null)} onOpenTask={onOpenTask} onOpenNote={onOpenNote} onOpenBoard={onOpenBoard} onOpenFile={onOpenFile} />;
   return (
     <div className="view">
       <header className="view-h"><h2>{L.title}</h2><span className="grow" />

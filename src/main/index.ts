@@ -1,4 +1,5 @@
-import { app, BrowserWindow, dialog, screen, protocol, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, screen, protocol, ipcMain, Notification } from 'electron';
+import { secureWebPreferences, hardenWindow, loadRenderer } from './windows';
 import path from 'node:path';
 import { openDatabase, migrate, checkIntegrity, type DB } from './db/connection';
 import { registerIpc } from './ipc';
@@ -18,11 +19,13 @@ const paths = {
   db: path.join(dataDir, 'data', 'workspace.sqlite'),
   backups: path.join(dataDir, 'backups'),
   logs: path.join(dataDir, 'logs'),
+  files: path.join(dataDir, 'files'),
   windowState: 'window',
 };
 
 let db: DB | null = null;
 let mainWindow: BrowserWindow | null = null;
+let onQuit: (() => void) | null = null;
 
 if (!app.requestSingleInstanceLock()) app.quit();
 app.on('second-instance', () => { if (mainWindow) { if (mainWindow.isMinimized()) mainWindow.restore(); mainWindow.focus(); } });
@@ -58,10 +61,7 @@ function createWindow(): void {
   mainWindow = new BrowserWindow({
     x: st.x, y: st.y, width: st.width, height: st.height, minWidth: 900, minHeight: 600,
     show: false, backgroundColor: '#0f1115', title: 'Workspace', autoHideMenuBar: true,
-    webPreferences: {
-      preload: path.join(__dirname, '../preload/index.js'),
-      contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, spellcheck: true,
-    },
+    webPreferences: secureWebPreferences(),
   });
   if (st.maximized) mainWindow.maximize();
   mainWindow.once('ready-to-show', () => mainWindow?.show());
@@ -79,11 +79,10 @@ function createWindow(): void {
     win.webContents.send('app:flush');
   });
   // bloqueia navegação e novas janelas arbitrárias no renderer
-  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  mainWindow.webContents.on('will-navigate', (e, url) => { if (!url.startsWith(process.env.VITE_DEV_SERVER_URL ?? 'file://')) e.preventDefault(); });
-
-  if (process.env.VITE_DEV_SERVER_URL) mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
-  else mainWindow.loadFile(path.join(__dirname, '../../renderer/index.html'));
+  hardenWindow(mainWindow);
+  // fechar a janela principal encerra o app (notas flutuantes abertas são reabertas na próxima vez)
+  mainWindow.on('closed', () => { mainWindow = null; app.quit(); });
+  loadRenderer(mainWindow);
 }
 
 async function bootstrap(): Promise<void> {
@@ -108,12 +107,42 @@ async function bootstrap(): Promise<void> {
     const m = media.get(new URL(req.url).hostname);
     return m ? new Response(new Uint8Array(m.data), { headers: { 'content-type': m.mime, 'cache-control': 'max-age=31536000, immutable' } }) : new Response('não encontrado', { status: 404 });
   });
-  registerIpc({ media, db, dataDir, version: app.getVersion(), ws: () => ws, setWs: (n) => { ws = n; } });
+  const ipc = registerIpc({ filesDir: paths.files, mainWindow: () => mainWindow, media, db, dataDir, version: app.getVersion(), ws: () => ws, setWs: (n) => { ws = n; } });
   createWindow();
+  ipc.sticky.restoreOpen();
+  onQuit = () => ipc.sticky.closeAllForQuit();
+  startScheduler(ipc);
 }
 
+/** Verifica lembretes e prazos a cada 30 s; avisa no app e, se autorizado, pelas notificações do Windows. */
+function startScheduler(ipc: ReturnType<typeof registerIpc>): void {
+  const tick = () => {
+    try {
+      const s = ipc.settings.get();
+      if (!s.notificationsEnabled) return;
+      const send = (title: string, body: string, nav: { view: string; id?: number }) => {
+        mainWindow?.webContents.send('app:event', { type: 'notice', title, body, ...nav });
+        if (s.systemNotifications && Notification.isSupported()) {
+          const n = new Notification({ title, body, silent: false });
+          n.on('click', () => { if (mainWindow) { if (mainWindow.isMinimized()) mainWindow.restore(); mainWindow.show(); mainWindow.focus(); mainWindow.webContents.send('app:event', { type: 'navigate', ...nav }); } });
+          n.show();
+        }
+      };
+      for (const r of ipc.planning.takeDue()) {
+        mainWindow?.webContents.send('app:event', { type: 'reminder', reminder: r });
+        send('Lembrete', r.title + (r.task_title && r.task_title !== r.title ? ` — ${r.task_title}` : ''), r.task_id ? { view: 'task', id: r.task_id } : { view: 'agenda' });
+      }
+      for (const t of ipc.planning.takeDueTasks(s.dueReminderTime)) send('Prazo hoje', t.title + (t.due_time ? ` às ${t.due_time}` : ''), { view: 'task', id: t.id });
+    } catch (e) { log('error', 'Falha no agendador de lembretes', e); }
+  };
+  setTimeout(tick, 5000);
+  setInterval(tick, 30_000);
+}
+
+if (process.platform === 'win32') app.setAppUserModelId('br.local.workspace'); // necessário para notificações do Windows
 app.whenReady().then(bootstrap);
 app.on('window-all-closed', () => app.quit());
+app.on('before-quit', () => onQuit?.());
 app.on('will-quit', () => {
   try { db?.pragma('wal_checkpoint(TRUNCATE)'); db?.close(); } catch (e) { log('error', 'Erro ao fechar o banco', e); }
 });

@@ -15,7 +15,7 @@ export function TrashView() {
         <table className="table"><thead><tr><th>Tipo</th><th>Item</th><th>Excluído em</th><th /></tr></thead><tbody>
           {items.map((i) => (
             <tr key={i.entity_type + i.id}>
-              <td>{({ task: 'Tarefa', project: 'Projeto', note: 'Anotação', canvas: 'Desenho/quadro' } as const)[i.entity_type]}</td><td>{i.title}</td><td>{fmtDateTime(i.deleted_at)}</td>
+              <td>{({ task: 'Tarefa', project: 'Projeto', note: 'Anotação', canvas: 'Desenho/quadro', attachment: 'Arquivo' } as const)[i.entity_type]}</td><td>{i.title}</td><td>{fmtDateTime(i.deleted_at)}</td>
               <td className="row end">
                 <button className="btn" onClick={() => ui.run(api().trash.restore(i.entity_type, i.id), 'Restaurado')}><RotateCcw size={14} /> Restaurar</button>
                 <button className="btn danger" onClick={async () => { if (await ui.confirm(`Excluir "${i.title}" permanentemente?`, true)) ui.run(api().trash.purge(i.entity_type, i.id)); }}><Trash2 size={14} /></button>
@@ -27,7 +27,7 @@ export function TrashView() {
   );
 }
 
-const ENTITY: Record<string, string> = { task: 'Tarefa', project: 'Projeto', workspace: 'Espaço', trash: 'Lixeira', note: 'Anotação', folder: 'Pasta', drawing: 'Desenho', board: 'Quadro' };
+const ENTITY: Record<string, string> = { task: 'Tarefa', project: 'Projeto', workspace: 'Espaço', trash: 'Lixeira', note: 'Anotação', folder: 'Pasta', drawing: 'Desenho', board: 'Quadro', attachment: 'Arquivo' };
 export function HistoryView({ onOpen, openNote, openCanvas }: { onOpen: (id: number) => void; openNote: (id: number) => void; openCanvas: (k: 'drawing' | 'board', id: number) => void }) {
   const { data: h = [] } = useQuery(() => api().history.list(300));
   return (
@@ -60,6 +60,14 @@ export function SettingsView({ settings }: { settings: Settings }) {
         <label className="row">Escala da interface
           <input type="range" min={0.8} max={1.3} step={0.05} value={settings.uiScale} onChange={(e) => set({ uiScale: Number(e.target.value) })} /> {Math.round(settings.uiScale * 100)}%</label>
         <label className="row"><input type="checkbox" checked={settings.animations} onChange={(e) => set({ animations: e.target.checked })} /> Animações</label>
+      </section>
+      <section className="card settings">
+        <h4>Notificações e lembretes</h4>
+        <label className="row"><input type="checkbox" checked={settings.notificationsEnabled} onChange={(e) => set({ notificationsEnabled: e.target.checked })} /> Ativar lembretes e avisos de prazo</label>
+        <label className="row"><input type="checkbox" disabled={!settings.notificationsEnabled} checked={settings.systemNotifications} onChange={(e) => set({ systemNotifications: e.target.checked })} /> Mostrar também nas notificações do Windows</label>
+        <label className="row"><input type="checkbox" disabled={!settings.notificationsEnabled} checked={settings.dueReminderTime !== null} onChange={(e) => set({ dueReminderTime: e.target.checked ? '09:00' : null })} /> Avisar no dia do prazo às
+          <input type="time" disabled={!settings.notificationsEnabled || settings.dueReminderTime === null} value={settings.dueReminderTime ?? '09:00'} onChange={(e) => e.target.value && set({ dueReminderTime: e.target.value })} /></label>
+        <small className="muted">Tarefas com horário definido avisam nesse horário. Lembretes específicos são criados no painel de cada tarefa ou na agenda. As notificações do Windows dependem da permissão do sistema (Configurações → Sistema → Notificações).</small>
       </section>
       <section className="card settings">
         <h4>Espaços de trabalho</h4>

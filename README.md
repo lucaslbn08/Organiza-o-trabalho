@@ -2,7 +2,7 @@
 
 Aplicativo de produtividade e organização pessoal para Windows 10/11 — offline, sem login, dados locais.
 
-> **Status: Etapas 1, 2 e 3 concluídas.** As seções marcadas como “Etapa N” na barra lateral
+> **Status: Etapas 1 a 4 concluídas.** As seções marcadas como “Etapa N” na barra lateral
 > ainda **não estão implementadas** e exibem uma tela informando isso. Veja [Roteiro](#roteiro).
 
 ## O que já funciona
@@ -67,7 +67,31 @@ Motor de desenho: **Excalidraw** (MIT, maduro, offline — fontes copiadas local
 - **Versões** (automática a cada 10 min de edição, manual, restaurar), duplicar, lixeira, histórico,
   pesquisa pelo título e pelos textos do desenho (Ctrl+K), vínculos com tarefas, notas e projetos.
 
-Atalhos: `Ctrl+Shift+N` nova anotação · `Ctrl+K` pesquisa · `Ctrl+N` nova tarefa · `Ctrl+B` barra lateral · `Ctrl+1..4` navegação · `Esc` fecha painel.
+### Etapa 4 — recursos avançados
+
+- **Arquivos e anexos** (seção *Arquivos* + painel em tarefas, notas, projetos e quadros):
+  - duas formas, claramente diferenciadas: **Copiar para a biblioteca interna** (`%APPDATA%\Workspace\files`,
+    deduplicada por SHA-256, cópia atômica, entra no backup) ou **Vincular o arquivo original** (só o caminho);
+  - arrastar arquivos do Windows para a tela, ou escolher pela janela do sistema;
+  - visualização interna de imagens, **PDFs (pdf.js, com páginas)** e texto; abrir com o aplicativo padrão;
+  - renomear identificação, pastas/subpastas, pesquisa (também no Ctrl+K), **detecção de arquivos ausentes**,
+    “Localizar arquivo…” para reapontar vínculos, “Incorporar à biblioteca” para copiar um vínculo;
+  - exclusão com confirmação; ao esvaziar a lixeira só cópias internas são apagadas — **originais externos nunca**;
+  - por segurança, executáveis/scripts (.exe, .bat, .ps1, .js, .lnk…) nunca são abertos, apenas exibidos na pasta.
+- **Quadro infinito**: PDFs como referência (imagem da 1ª página) e links para arquivos da biblioteca.
+- **Captura de tela** (ícone de câmera ou Ctrl+K): região selecionada, janela ou tela inteira (`desktopCapturer`);
+  enviar para nova anotação, anotação existente, tarefa (anexo), desenho, quadro, ou copiar para a área de transferência.
+- **Notas flutuantes**: janelas pequenas sem moldura, arrastáveis, redimensionáveis, com cor, minimizar,
+  **fixar sobre todos os aplicativos**, relacionar a uma tarefa; posição/tamanho salvos e reabertas automaticamente.
+- **Agenda** diária, semanal e mensal: tarefas por prazo (com horário opcional), arrastar para outro dia,
+  criar tarefa com duplo clique, lembretes (criar, adiar, dispensar).
+- **Lembretes e notificações**: dentro do app e pelas **notificações do Windows** (configurável); aviso
+  automático no dia do prazo; **central de notificações** (sino) com atrasadas, hoje, próximos 3 dias e lembretes.
+- **Área de trabalho**: **abas** independentes (Ctrl+T, Ctrl+W, Ctrl+Tab, Ctrl+clique/botão do meio para nova aba,
+  arrastar para reordenar) e **divisão lado a lado ou horizontal**; abas, divisão, notas e quadros abertos são
+  restaurados ao reabrir.
+
+Atalhos: `Ctrl+T` nova aba · `Ctrl+W` fechar aba · `Ctrl+Tab` próxima aba · `Ctrl+Shift+N` nova anotação · `Ctrl+K` pesquisa · `Ctrl+N` nova tarefa · `Ctrl+B` barra lateral · `Ctrl+1..4` navegação · `Esc` fecha painel.
 
 ## Executar em desenvolvimento
 
@@ -97,7 +121,7 @@ recompile para o Node antes: `npm rebuild better-sqlite3`.
 npm test
 ```
 
-Cobrem: Teste 3 (quadro com tarefa, nota, desenho livre, seta, imagem, grupos e câmera idênticos após reabrir), Teste 4 pela camada de dados do quadro, versões/lixeira/vínculos de desenhos, migração v2→v3; Teste 2 (nota com formatação, checklist, tabela e imagem preservada após reabrir), migração v1→v2
+Cobrem: anexos (cópia/vínculo, dedup, ausentes, exclusão que preserva originais), lembretes, aviso de prazo, central, notas flutuantes persistidas, capturas inseridas em nota/quadro, migração v3→v4; Teste 3 (quadro com tarefa, nota, desenho livre, seta, imagem, grupos e câmera idênticos após reabrir), Teste 4 pela camada de dados do quadro, versões/lixeira/vínculos de desenhos, migração v2→v3; Teste 2 (nota com formatação, checklist, tabela e imagem preservada após reabrir), migração v1→v2
 com backup preventivo, pesquisa FTS sem acentos, versões, pastas, vínculos, lixeira de notas, mídia; Teste 1 (10 tarefas/status persistem após reabrir), Teste 4 (lista ↔ Kanban no mesmo registro),
 Teste 6 (reabrir/atualizar sem perder dados nem reaplicar migrações), Teste 7 (transação interrompida e
 processo encerrado sem `close()` preservam apenas dados confirmados), recorrência, duplicação, lixeira,
@@ -120,6 +144,7 @@ Execute no Windows (o módulo nativo precisa ser compilado para Windows).
 | Banco | `%APPDATA%\Workspace\data\workspace.sqlite` (+ `-wal`) |
 | Backups preventivos de migração | `%APPDATA%\Workspace\backups\` |
 | Logs | `%APPDATA%\Workspace\logs\workspace.log` |
+| Biblioteca de arquivos | `%APPDATA%\Workspace\files\` |
 
 O instalador está configurado com `deleteAppDataOnUninstall: false`. Para atualizar, basta instalar a
 versão nova por cima. Na abertura, o app: verifica `user_version` → se houver migrações pendentes,
@@ -136,9 +161,7 @@ Documentação técnica: [docs/ARQUITETURA.md](docs/ARQUITETURA.md).
 | 1 | Base, SQLite, interface, navegação, tarefas, Kanban, autosave | **Concluída** |
 | 2 | Editor de notas (rich text, versões), pastas, pesquisa em notas, lixeira de notas | **Concluída** |
 | 3 | Editor de desenhos, quadro infinito, conectores, tarefas/notas sincronizadas no quadro | **Concluída** |
-| 4 | Arquivos/anexos, captura de tela, notas flutuantes, agenda/lembretes, abas e painéis divididos | Pendente |
+| 4 | Arquivos/anexos, captura de tela, notas flutuantes, agenda/lembretes, abas e painéis divididos | **Concluída** |
 | 5 | Backup ZIP (exportar/verificar/restaurar), otimizações, empacotamento final | Pendente |
 
-Ainda **não** existe: abas/divisão para a área de trabalho inteira (hoje há abas e lado a lado só nas notas),
-atalhos personalizáveis, anexos de arquivos em tarefas, **PDFs e links para arquivos dentro do quadro**
-(dependem da biblioteca de arquivos — Etapa 4), notas flutuantes (Etapa 4), backup ZIP (Etapa 5).
+Ainda **não** existe: atalhos personalizáveis e backup ZIP / restauração (Etapa 5).

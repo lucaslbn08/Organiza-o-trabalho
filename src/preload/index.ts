@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import type { WorkspaceApi } from '../shared/types';
 
 const call = (ch: string) => (...args: unknown[]) => ipcRenderer.invoke(ch, ...args);
@@ -34,7 +34,23 @@ const api: WorkspaceApi = {
     snapshot: call('canvases:snapshot'), restoreVersion: call('canvases:restoreVersion'),
   } as WorkspaceApi['canvases'],
   briefs: { tasks: call('briefs:tasks'), notes: call('briefs:notes') } as WorkspaceApi['briefs'],
-  files: { saveAs: call('files:saveAs') } as WorkspaceApi['files'],
+  files: {
+    saveAs: call('files:saveAs'), list: call('files:list'), get: call('files:get'), pick: call('files:pick'), importPaths: call('files:importPaths'),
+    importBytes: call('files:importBytes'), rename: call('files:rename'), setFolder: call('files:setFolder'), remove: call('files:remove'),
+    open: call('files:open'), reveal: call('files:reveal'), read: call('files:read'), link: call('files:link'), unlink: call('files:unlink'),
+    relink: call('files:relink'), embed: call('files:embed'),
+    // caminho real de um arquivo arrastado do Windows (o renderer não tem acesso ao sistema de arquivos)
+    pathForFile: (f: File) => { try { return webUtils.getPathForFile(f); } catch { return ''; } },
+  } as WorkspaceApi['files'],
+  reminders: { list: call('reminders:list'), create: call('reminders:create'), remove: call('reminders:remove'), dismiss: call('reminders:dismiss'), snooze: call('reminders:snooze'), center: call('reminders:center') } as WorkspaceApi['reminders'],
+  agenda: { range: call('agenda:range') } as WorkspaceApi['agenda'],
+  floating: { list: call('floating:list'), get: call('floating:get'), create: call('floating:create'), update: call('floating:update'), open: call('floating:open'), close: call('floating:close'), remove: call('floating:remove') } as WorkspaceApi['floating'],
+  capture: { sources: call('capture:sources'), take: call('capture:take'), region: call('capture:region'), send: call('capture:send'), regionInit: call('capture:regionInit'), regionDone: call('capture:regionDone') } as WorkspaceApi['capture'],
+  onEvent(cb) {
+    const l = (_: unknown, e: Parameters<typeof cb>[0]) => cb(e);
+    ipcRenderer.on('app:event', l);
+    return () => ipcRenderer.removeListener('app:event', l);
+  },
   search: { query: call('search:query') } as WorkspaceApi['search'],
   trash: { list: call('trash:list'), restore: call('trash:restore'), purge: call('trash:purge'), empty: call('trash:empty') } as WorkspaceApi['trash'],
   db: { checkIntegrity: call('db:checkIntegrity') } as WorkspaceApi['db'],

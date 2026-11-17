@@ -207,6 +207,68 @@ CREATE TRIGGER canvas_links_note_del AFTER DELETE ON notes BEGIN
 END;
 `,
   },
+  {
+    version: 4,
+    name: 'arquivos e anexos, lembretes, notas flutuantes, horário nas tarefas',
+    up: `
+CREATE TABLE attachments (
+  id INTEGER PRIMARY KEY,
+  workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  name TEXT NOT NULL CHECK (length(trim(name)) > 0),
+  original_name TEXT NOT NULL,
+  mode TEXT NOT NULL CHECK (mode IN ('internal','link')),
+  stored_path TEXT NOT NULL,
+  mime TEXT NOT NULL DEFAULT 'application/octet-stream',
+  size INTEGER NOT NULL DEFAULT 0,
+  sha256 TEXT,
+  folder TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  deleted_at TEXT
+);
+CREATE INDEX idx_attachments_ws ON attachments(workspace_id, deleted_at, folder);
+CREATE TABLE attachment_links (
+  attachment_id INTEGER NOT NULL REFERENCES attachments(id) ON DELETE CASCADE,
+  target_type TEXT NOT NULL CHECK (target_type IN ('task','note','project','canvas')),
+  target_id INTEGER NOT NULL,
+  PRIMARY KEY (attachment_id, target_type, target_id)
+);
+CREATE INDEX idx_attachment_links_target ON attachment_links(target_type, target_id);
+CREATE TRIGGER att_links_task_del AFTER DELETE ON tasks BEGIN DELETE FROM attachment_links WHERE target_type = 'task' AND target_id = old.id; END;
+CREATE TRIGGER att_links_note_del AFTER DELETE ON notes BEGIN DELETE FROM attachment_links WHERE target_type = 'note' AND target_id = old.id; END;
+CREATE TRIGGER att_links_project_del AFTER DELETE ON projects BEGIN DELETE FROM attachment_links WHERE target_type = 'project' AND target_id = old.id; END;
+CREATE TRIGGER att_links_canvas_del AFTER DELETE ON canvases BEGIN DELETE FROM attachment_links WHERE target_type = 'canvas' AND target_id = old.id; END;
+
+ALTER TABLE tasks ADD COLUMN due_time TEXT CHECK (due_time IS NULL OR due_time GLOB '[0-2][0-9]:[0-5][0-9]');
+
+CREATE TABLE reminders (
+  id INTEGER PRIMARY KEY,
+  workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  task_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  remind_at TEXT NOT NULL,
+  fired_at TEXT,
+  dismissed_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+CREATE INDEX idx_reminders_due ON reminders(workspace_id, dismissed_at, remind_at);
+CREATE TABLE notification_log (key TEXT PRIMARY KEY, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')));
+
+CREATE TABLE floating_notes (
+  id INTEGER PRIMARY KEY,
+  workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
+  content TEXT NOT NULL DEFAULT '',
+  color TEXT NOT NULL DEFAULT '#fff3a3',
+  x INTEGER, y INTEGER, width INTEGER NOT NULL DEFAULT 260, height INTEGER NOT NULL DEFAULT 240,
+  always_on_top INTEGER NOT NULL DEFAULT 1 CHECK (always_on_top IN (0,1)),
+  minimized INTEGER NOT NULL DEFAULT 0 CHECK (minimized IN (0,1)),
+  is_open INTEGER NOT NULL DEFAULT 1 CHECK (is_open IN (0,1)),
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  deleted_at TEXT
+);
+`,
+  },
 ];
 
 export const LATEST_DB_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

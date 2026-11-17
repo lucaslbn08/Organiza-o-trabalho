@@ -32,7 +32,7 @@ export interface TaskLink { id: number; task_id: number; label: string; url: str
 export interface Task {
   id: number; workspace_id: number; project_id: number | null; category_id: number | null;
   parent_id: number | null; title: string; description: string; status: TaskStatus; priority: TaskPriority;
-  due_date: string | null; recurrence: Recurrence; position: number;
+  due_date: string | null; due_time: string | null; recurrence: Recurrence; position: number;
   created_at: string; updated_at: string; completed_at: string | null; deleted_at: string | null;
   tags: Tag[]; progress: { done: number; total: number };
 }
@@ -42,7 +42,7 @@ export interface TaskDetail extends Task {
 
 export interface TaskInput {
   title: string; description?: string; status?: TaskStatus; priority?: TaskPriority;
-  project_id?: number | null; category_id?: number | null; due_date?: string | null;
+  project_id?: number | null; category_id?: number | null; due_date?: string | null; due_time?: string | null;
   recurrence?: Recurrence; tags?: string[];
 }
 export type TaskPatch = Partial<TaskInput>;
@@ -58,7 +58,7 @@ export interface KanbanColumn { id: number; workspace_id: number; status: TaskSt
 export interface HistoryEntry {
   id: number; entity_type: string; entity_id: number; action: string; details: string; created_at: string;
 }
-export interface TrashItem { entity_type: 'task' | 'project' | 'note' | 'canvas'; id: number; title: string; deleted_at: string }
+export interface TrashItem { entity_type: 'task' | 'project' | 'note' | 'canvas' | 'attachment'; id: number; title: string; deleted_at: string }
 
 export interface DashboardStats {
   total: number; pending: number; in_progress: number; paused: number; done: number; cancelled: number;
@@ -72,7 +72,10 @@ export interface Settings {
   lastView: string; activeWorkspaceId: number;
   openNotes: number[]; activeNote: number | null;
   openCanvas: { drawing: number | null; board: number | null }; wheelZoom: boolean;
+  notificationsEnabled: boolean; systemNotifications: boolean; dueReminderTime: string | null;
+  tabs: AppTab[]; activeTab: string; split: { tabId: string; dir: 'vertical' | 'horizontal' } | null;
 }
+export interface AppTab { id: string; view: string; arg?: number }
 
 export interface AppInfo { version: string; dbVersion: number; dataDir: string; platform: string; electron: string }
 
@@ -93,7 +96,7 @@ export interface NotePatch {
   title?: string; content_json?: string; folder_id?: number | null; project_id?: number | null; category_id?: number | null;
   pinned?: boolean; favorite?: boolean; tags?: string[];
 }
-export type SearchType = 'task' | 'note' | 'project' | 'tag' | 'drawing' | 'board';
+export type SearchType = 'task' | 'note' | 'project' | 'tag' | 'drawing' | 'board' | 'file';
 export interface SearchHit { type: SearchType; id: number; title: string; snippet: string; extra?: string }
 
 export type CanvasKind = 'drawing' | 'board';
@@ -107,6 +110,22 @@ export interface Canvas extends CanvasSummary {
 export interface CanvasVersion { id: number; canvas_id: number; reason: string; created_at: string; size: number }
 export interface TaskBrief { id: number; title: string; status: TaskStatus; priority: TaskPriority; due_date: string | null; deleted: boolean }
 export interface NoteBrief { id: number; title: string; excerpt: string; deleted: boolean }
+
+export type AttachmentTarget = 'task' | 'note' | 'project' | 'canvas';
+export interface Attachment {
+  id: number; name: string; original_name: string; mode: 'internal' | 'link'; stored_path: string; mime: string; size: number;
+  folder: string; created_at: string; missing: boolean; link_count: number;
+}
+export interface AttachmentDetail extends Attachment { links: { type: AttachmentTarget; id: number; title: string }[]; absolute_path: string }
+export interface ImportResult { imported: Attachment[]; errors: { name: string; message: string }[] }
+export interface Reminder { id: number; task_id: number | null; title: string; remind_at: string; fired_at: string | null; dismissed_at: string | null; task_title: string | null }
+export interface NotificationCenter { overdue: Task[]; today: Task[]; upcoming: Task[]; reminders: Reminder[]; count: number }
+export interface FloatingNote {
+  id: number; task_id: number | null; task_title: string | null; content: string; color: string; x: number | null; y: number | null;
+  width: number; height: number; always_on_top: 0 | 1; minimized: 0 | 1; is_open: 0 | 1; updated_at: string;
+}
+export interface CaptureSource { id: string; name: string; kind: 'screen' | 'window'; thumbnail: string }
+export type CaptureTarget = { type: 'clipboard' } | { type: 'new-note' } | { type: 'note' | 'task' | 'drawing' | 'board'; id: number };
 
 /** API exposta ao renderer pelo preload (contextBridge). */
 export interface WorkspaceApi {
@@ -161,7 +180,38 @@ export interface WorkspaceApi {
     versions(id: number): Promise<CanvasVersion[]>; snapshot(id: number): Promise<void>; restoreVersion(versionId: number): Promise<void>;
   };
   briefs: { tasks(ids: number[]): Promise<TaskBrief[]>; notes(ids: number[]): Promise<NoteBrief[]> };
-  files: { saveAs(bytes: Uint8Array, defaultName: string, ext: 'png' | 'pdf'): Promise<string | null> };
+  files: {
+    saveAs(bytes: Uint8Array, defaultName: string, ext: 'png' | 'pdf'): Promise<string | null>;
+    list(q?: { search?: string; folder?: string; target?: { type: AttachmentTarget; id: number }; missingOnly?: boolean }): Promise<Attachment[]>;
+    get(id: number): Promise<AttachmentDetail>;
+    pick(mode: 'internal' | 'link', target?: { type: AttachmentTarget; id: number }): Promise<ImportResult>;
+    importPaths(paths: string[], mode: 'internal' | 'link', target?: { type: AttachmentTarget; id: number }): Promise<ImportResult>;
+    importBytes(name: string, bytes: Uint8Array, mime: string, target?: { type: AttachmentTarget; id: number }, folder?: string): Promise<Attachment>;
+    rename(id: number, name: string): Promise<void>; setFolder(id: number, folder: string): Promise<void>;
+    remove(id: number): Promise<void>; open(id: number): Promise<void>; reveal(id: number): Promise<void>;
+    read(id: number): Promise<{ mime: string; bytes: Uint8Array }>;
+    link(id: number, type: AttachmentTarget, targetId: number): Promise<void>; unlink(id: number, type: AttachmentTarget, targetId: number): Promise<void>;
+    relink(id: number): Promise<boolean>; embed(id: number): Promise<void>;
+    pathForFile(file: File): string;
+  };
+  reminders: {
+    list(): Promise<Reminder[]>; create(input: { task_id?: number | null; title: string; remind_at: string }): Promise<Reminder>;
+    remove(id: number): Promise<void>; dismiss(id: number): Promise<void>; snooze(id: number, minutes: number): Promise<void>;
+    center(): Promise<NotificationCenter>;
+  };
+  agenda: { range(from: string, to: string): Promise<{ tasks: Task[]; reminders: Reminder[] }> };
+  floating: {
+    list(): Promise<FloatingNote[]>; get(id: number): Promise<FloatingNote>;
+    create(input?: { content?: string; task_id?: number | null; color?: string }): Promise<FloatingNote>;
+    update(id: number, patch: Partial<Pick<FloatingNote, 'content' | 'color' | 'task_id'>> & { always_on_top?: boolean; minimized?: boolean }): Promise<void>;
+    open(id: number): Promise<void>; close(id: number): Promise<void>; remove(id: number): Promise<void>;
+  };
+  capture: {
+    sources(): Promise<CaptureSource[]>; take(sourceId: string): Promise<Uint8Array>; region(): Promise<Uint8Array | null>;
+    send(png: Uint8Array, target: CaptureTarget): Promise<string>;
+    regionInit(): Promise<{ dataURL: string; width: number; height: number }>; regionDone(rect: { x: number; y: number; width: number; height: number } | null): Promise<void>;
+  };
+  onEvent(cb: (e: { type: 'reminder'; reminder: Reminder } | { type: 'navigate'; view: string; id?: number } | { type: 'notice'; title: string; body: string; view: string; id?: number }) => void): () => void;
   search: { query(q: string, types?: SearchType[]): Promise<SearchHit[]> };
   trash: { list(): Promise<TrashItem[]>; restore(type: TrashItem['entity_type'], id: number): Promise<void>; purge(type: TrashItem['entity_type'], id: number): Promise<void>; empty(): Promise<void> };
   db: { checkIntegrity(): Promise<{ ok: boolean; message: string }> };

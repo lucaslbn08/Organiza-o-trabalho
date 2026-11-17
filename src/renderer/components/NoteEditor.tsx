@@ -8,12 +8,13 @@ import Image from '@tiptap/extension-image';
 import { TaskList, TaskItem } from '@tiptap/extension-list';
 import {
   Bold, Italic, Underline, Strikethrough, Heading1, Heading2, Heading3, List, ListOrdered, ListChecks, Quote, Code2, Minus,
-  Link2, Table as TableIcon, ImagePlus, Undo2, Redo2, Highlighter, Palette, Pin, Star, Copy, Trash2, History, X, Save,
+  Link2, Table as TableIcon, ImagePlus, Undo2, Redo2, Highlighter, Palette, Pin, Star, Copy, Trash2, History, X, Save, Paperclip,
 } from 'lucide-react';
 import type { Note } from '../../shared/types';
 import { STATUS_LABEL } from '../../shared/types';
 import { api, useQuery, useAutosave, fmtDateTime } from '../lib/api';
 import { useUi } from '../lib/ui';
+import { AttachmentsSection } from './Attachments';
 
 export const editorExtensions = [
   StarterKit.configure({ link: { openOnClick: false, autolink: true, protocols: ['http', 'https', 'mailto'] } }),
@@ -30,7 +31,7 @@ async function saveImage(file: File): Promise<string> {
   return api().media.save(new Uint8Array(await file.arrayBuffer()), file.type);
 }
 
-type CanvasNav = { openCanvas: (k: 'drawing' | 'board', id: number) => void; newCanvas: (k: 'drawing' | 'board', noteId: number) => void };
+type CanvasNav = { openCanvas: (k: 'drawing' | 'board', id: number) => void; newCanvas: (k: 'drawing' | 'board', noteId: number) => void; onOpenFile: (id: number) => void };
 export function NoteEditor({ id, onOpenTask, onClose, ...nav }: { id: number; onOpenTask: (id: number) => void; onClose?: () => void } & CanvasNav) {
   const { data: note, error } = useQuery(() => api().notes.get(id), [id]);
   // uma falha ao *recarregar* não desmonta um editor que já tem dados (evita perder o que está sendo digitado)
@@ -43,12 +44,13 @@ function B({ on, title, act, children }: { on?: boolean; title: string; act: () 
   return <button className={`tb ${on ? 'on' : ''}`} title={title} onMouseDown={(e) => e.preventDefault()} onClick={act}>{children}</button>;
 }
 
-function Inner({ note, onOpenTask, onClose, openCanvas, newCanvas }: { note: Note; onOpenTask: (id: number) => void; onClose?: () => void } & CanvasNav) {
+function Inner({ note, onOpenTask, onClose, openCanvas, newCanvas, onOpenFile }: { note: Note; onOpenTask: (id: number) => void; onClose?: () => void } & CanvasNav) {
   const ui = useUi();
   const [title, setTitle] = useState(note.title);
   const [json, setJson] = useState(note.content_json);
   const [tags, setTags] = useState(note.tags.map((t) => t.name).join(', '));
   const [showVersions, setShowVersions] = useState(false);
+  const [showFiles, setShowFiles] = useState(false);
   const known = useRef({ rev: note.revision, sent: note.content_json, base: '', inflight: 0 });
   const { data: projects = [] } = useQuery(() => api().projects.list());
   const { data: folders = [] } = useQuery(() => api().notes.folders());
@@ -118,6 +120,7 @@ function Inner({ note, onOpenTask, onClose, openCanvas, newCanvas }: { note: Not
         <span className="grow" />
         <button className={`icon ${meta.pinned ? 'active' : ''}`} title={meta.pinned ? 'Desafixar' : 'Fixar'} onClick={() => upd({ pinned: !meta.pinned })}><Pin size={16} /></button>
         <button className={`icon ${meta.favorite ? 'active' : ''}`} title={meta.favorite ? 'Remover dos favoritos' : 'Favoritar'} onClick={() => upd({ favorite: !meta.favorite })}><Star size={16} /></button>
+        <button className={`icon ${showFiles ? 'active' : ''}`} title="Arquivos anexados" onClick={() => setShowFiles(!showFiles)}><Paperclip size={16} /></button>
         <button className="icon" title="Histórico de versões" onClick={() => setShowVersions(!showVersions)}><History size={16} /></button>
         <button className="icon" title="Duplicar" onClick={() => ui.run(api().notes.duplicate(note.id), 'Anotação duplicada')}><Copy size={16} /></button>
         <button className="icon" title="Enviar para a lixeira" onClick={async () => { await ui.run(api().notes.remove(note.id), 'Anotação enviada para a lixeira'); onClose?.(); }}><Trash2 size={16} /></button>
@@ -193,6 +196,7 @@ function Inner({ note, onOpenTask, onClose, openCanvas, newCanvas }: { note: Not
       <div className="note-body">
         <EditorContent editor={editor} className="editor" />
         {showVersions && <Versions noteId={note.id} onClose={() => setShowVersions(false)} />}
+        {showFiles && <aside className="versions"><AttachmentsSection target={{ type: 'note', id: note.id }} onPreview={onOpenFile} /></aside>}
       </div>
     </div>
   );

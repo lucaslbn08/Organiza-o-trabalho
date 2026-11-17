@@ -94,10 +94,10 @@ export class TaskService {
   create(input: TaskInput): Task {
     return this.db.transaction(() => {
       const status = input.status ?? 'pending';
-      const info = this.db.prepare(`INSERT INTO tasks (workspace_id, project_id, category_id, title, description, status, priority, due_date, recurrence, position, completed_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?)`).run(
+      const info = this.db.prepare(`INSERT INTO tasks (workspace_id, project_id, category_id, title, description, status, priority, due_date, due_time, recurrence, position, completed_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).run(
         this.ws(), input.project_id ?? null, input.category_id ?? null, input.title.trim(), input.description ?? '',
-        status, input.priority ?? 'normal', input.due_date ?? null, input.recurrence ?? 'none', this.nextPosition(),
+        status, input.priority ?? 'normal', input.due_date ?? null, input.due_date ? input.due_time ?? null : null, input.recurrence ?? 'none', this.nextPosition(),
         status === 'done' ? now() : null,
       );
       const id = Number(info.lastInsertRowid);
@@ -111,7 +111,7 @@ export class TaskService {
     return this.db.transaction(() => {
       const before = this.row(id);
       const fields: string[] = []; const args: unknown[] = [];
-      const simple = ['title', 'description', 'priority', 'project_id', 'category_id', 'due_date', 'recurrence'] as const;
+      const simple = ['title', 'description', 'priority', 'project_id', 'category_id', 'due_date', 'due_time', 'recurrence'] as const;
       for (const k of simple) {
         if (patch[k] !== undefined) { fields.push(`${k} = ?`); args.push(k === 'title' ? String(patch[k]).trim() : patch[k]); }
       }
@@ -143,7 +143,7 @@ export class TaskService {
     const tags = (this.db.prepare('SELECT g.name FROM task_tags tt JOIN tags g ON g.id = tt.tag_id WHERE tt.task_id = ?').all(t.id) as { name: string }[]).map((x) => x.name);
     const created = this.create({
       title: t.title, description: t.description, priority: t.priority, project_id: t.project_id,
-      category_id: t.category_id, due_date: next.toISOString().slice(0, 10), recurrence: t.recurrence, tags,
+      category_id: t.category_id, due_date: next.toISOString().slice(0, 10), due_time: t.due_time, recurrence: t.recurrence, tags,
     });
     this.db.prepare(`INSERT INTO checklist_items (task_id, kind, text, done, position) SELECT ?, kind, text, 0, position FROM checklist_items WHERE task_id = ?`).run(created.id, t.id);
     // a recorrência passa a ser responsabilidade da nova ocorrência

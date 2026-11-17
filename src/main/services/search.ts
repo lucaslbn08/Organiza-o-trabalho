@@ -6,7 +6,7 @@ import { ftsQuery } from './notes';
 const like = (q: string) => `%${q.replace(/[%_\\]/g, (c) => '\\' + c)}%`;
 
 /** Pesquisa universal (Ctrl+K): tarefas, notas (texto completo), projetos e etiquetas. */
-export function searchAll(db: DB, ws: number, q: string, types: SearchType[] = ['task', 'note', 'project', 'tag', 'drawing', 'board'], limit = 15): SearchHit[] {
+export function searchAll(db: DB, ws: number, q: string, types: SearchType[] = ['task', 'note', 'project', 'tag', 'drawing', 'board', 'file'], limit = 15): SearchHit[] {
   const query = q.trim();
   if (!query) return [];
   const s = like(query);
@@ -37,6 +37,10 @@ export function searchAll(db: DB, ws: number, q: string, types: SearchType[] = [
     const rows = db.prepare(`SELECT id, title, substr(content_text, 1, 120) AS t FROM canvases WHERE workspace_id = ? AND kind = ? AND deleted_at IS NULL
       AND (title LIKE ? ESCAPE '\\' OR content_text LIKE ? ESCAPE '\\') ORDER BY updated_at DESC LIMIT ?`).all(ws, kind, s, s, limit) as { id: number; title: string; t: string }[];
     hits.push(...rows.map((r) => ({ type: kind, id: r.id, title: r.title || 'Sem título', snippet: r.t })));
+  }
+  if (types.includes('file')) {
+    const rows = db.prepare(`SELECT id, name, folder, mode FROM attachments WHERE workspace_id = ? AND deleted_at IS NULL AND (name LIKE ? ESCAPE '\\' OR original_name LIKE ? ESCAPE '\\' OR folder LIKE ? ESCAPE '\\') ORDER BY created_at DESC LIMIT ?`).all(ws, s, s, s, limit) as { id: number; name: string; folder: string; mode: string }[];
+    hits.push(...rows.map((r) => ({ type: 'file' as const, id: r.id, title: r.name, snippet: r.folder, extra: r.mode === 'internal' ? 'Biblioteca' : 'Vínculo' })));
   }
   return hits;
 }

@@ -4,16 +4,17 @@ import type { TaskDetail as TD, Recurrence } from '../../shared/types';
 import { RECURRENCE_LABEL, RECURRENCES } from '../../shared/types';
 import { api, useQuery, useAutosave, fmtDateTime } from '../lib/api';
 import { useUi } from '../lib/ui';
+import { AttachmentsSection } from './Attachments';
 import { StatusSelect, PrioritySelect } from './TaskBits';
 
-type NoteNav = { openNote: (id: number) => void; newNote: (taskId: number) => void; openCanvas: (k: 'drawing' | 'board', id: number) => void; newCanvas: (k: 'drawing' | 'board', taskId: number) => void };
+type NoteNav = { openNote: (id: number) => void; newNote: (taskId: number) => void; openCanvas: (k: 'drawing' | 'board', id: number) => void; newCanvas: (k: 'drawing' | 'board', taskId: number) => void; onOpenFile: (id: number) => void };
 export function TaskDetailPanel({ id, onClose, ...nav }: { id: number; onClose: () => void } & NoteNav) {
   const { data: t } = useQuery(() => api().tasks.get(id), [id]);
   if (!t) return <aside className="detail" />;
   return <Editor key={t.id} t={t} onClose={onClose} {...nav} />;
 }
 
-function Editor({ t, onClose, openNote, newNote, openCanvas, newCanvas }: { t: TD; onClose: () => void } & NoteNav) {
+function Editor({ t, onClose, openNote, newNote, openCanvas, newCanvas, onOpenFile }: { t: TD; onClose: () => void } & NoteNav) {
   const ui = useUi();
   const { data: projects = [] } = useQuery(() => api().projects.list());
   const { data: categories = [] } = useQuery(() => api().categories.list());
@@ -51,7 +52,8 @@ function Editor({ t, onClose, openNote, newNote, openCanvas, newCanvas }: { t: T
       <div className="grid2">
         <label>Status<StatusSelect value={t.status} onChange={(status) => upd({ status })} /></label>
         <label>Prioridade<PrioritySelect value={t.priority} onChange={(priority) => upd({ priority })} /></label>
-        <label>Prazo<input type="date" value={t.due_date ?? ''} onChange={(e) => upd({ due_date: e.target.value || null })} /></label>
+        <label>Prazo<span className="row nowrap"><input type="date" value={t.due_date ?? ''} onChange={(e) => upd({ due_date: e.target.value || null, ...(e.target.value ? {} : { due_time: null }) })} />
+          <input type="time" value={t.due_time ?? ''} disabled={!t.due_date} title="Horário (opcional)" onChange={(e) => upd({ due_time: e.target.value || null })} /></span></label>
         <label>Repetição<select value={t.recurrence} onChange={(e) => upd({ recurrence: e.target.value as Recurrence })}>
           {RECURRENCES.map((r) => <option key={r} value={r}>{RECURRENCE_LABEL[r]}</option>)}</select></label>
         <label>Projeto<select value={t.project_id ?? ''} onChange={(e) => upd({ project_id: e.target.value ? Number(e.target.value) : null })}>
@@ -97,6 +99,10 @@ function Editor({ t, onClose, openNote, newNote, openCanvas, newCanvas }: { t: T
         </div>
       </section>
 
+      <AttachmentsSection target={{ type: 'task', id: t.id }} onPreview={onOpenFile} />
+
+      <Reminders taskId={t.id} title={t.title} dueDate={t.due_date} />
+
       <section>
         <h4>Desenhos e quadros</h4>
         {[...drawings, ...boards].map((c) => (
@@ -133,5 +139,25 @@ function Editor({ t, onClose, openNote, newNote, openCanvas, newCanvas }: { t: T
         <small className="muted">Criada em {fmtDateTime(t.created_at)}</small>
       </section>
     </aside>
+  );
+}
+
+function Reminders({ taskId, title, dueDate }: { taskId: number; title: string; dueDate: string | null }) {
+  const ui = useUi();
+  const { data: all = [] } = useQuery(() => api().reminders.list());
+  const mine = all.filter((r) => r.task_id === taskId);
+  const [when, setWhen] = useState(() => (dueDate ?? new Date().toISOString().slice(0, 10)) + 'T09:00');
+  return (
+    <section>
+      <h4>Lembretes</h4>
+      {mine.map((r) => (
+        <div key={r.id} className="check-row"><span>{fmtDateTime(r.remind_at)}</span>{r.fired_at && <small className="muted">disparado</small>}
+          <button className="icon ghost" title="Remover" onClick={() => ui.run(api().reminders.remove(r.id))}><X size={12} /></button></div>
+      ))}
+      <div className="row">
+        <input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} />
+        <button className="btn" onClick={() => when && ui.run(api().reminders.create({ task_id: taskId, title, remind_at: new Date(when).toISOString() }), 'Lembrete criado')}><Plus size={14} /> Lembrar</button>
+      </div>
+    </section>
   );
 }

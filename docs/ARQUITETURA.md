@@ -41,6 +41,10 @@ src/
     services/notes.ts      anotações, pastas, versões, vínculos, mídia, extração de texto
     services/search.ts     pesquisa universal
     services/canvases.ts   desenhos e quadros: cenas, versões, vínculos, dados atuais de tarefas/notas
+    services/attachments.ts biblioteca de arquivos (cópia com hash, vínculos, ausentes, exclusão segura)
+    services/planning.ts   agenda, lembretes, central de notificações, notas flutuantes
+    services/capture.ts    inserir capturas em notas e quadros
+  main/windows.ts          janelas seguras: notas flutuantes, captura de tela
   preload/index.ts         ponte segura
   renderer/
     App.tsx                shell: barra lateral, barra superior, atalhos, painel de detalhes
@@ -73,13 +77,16 @@ tests/                     testes Vitest das funções críticas
 | `media` | imagens deduplicadas por SHA-256 (BLOB), servidas via `ws-media://` — v2 |
 | `canvases` | desenhos e quadros (`kind`): `scene_json` = elementos editáveis + câmera/zoom + mapa de imagens → `media`; miniatura; texto para busca — v3 |
 | `canvas_versions` | versões anteriores da cena (máx. 50) — v3 |
+| `attachments`, `attachment_links` | biblioteca: `mode` internal (caminho relativo em `files/`) ou link (caminho absoluto); vínculos com tarefa/nota/projeto/quadro — v4 |
+| `reminders`, `notification_log` | lembretes e controle de avisos de prazo já enviados — v4 |
+| `floating_notes` | notas flutuantes: conteúdo, cor, posição, tamanho, fixação, aberta/fechada — v4 |
+| `tasks.due_time` | horário opcional do prazo — v4 |
 | `canvas_links` | vínculos desenho/quadro ↔ tarefa/nota (limpos por gatilho ao excluir o alvo) — v3 |
 
 Todas as FKs têm `ON DELETE` explícito; exclusão de usuário é sempre lógica (`deleted_at`) até a lixeira
 ser esvaziada. `PRAGMA user_version` guarda a versão do esquema.
 
-Tabelas previstas nas próximas etapas (como novas migrações): `attachments`, `attachment_links`, `reminders`,
-`floating_notes`, `ui_session` (abas/painéis).
+As abas e a divisão da área de trabalho ficam em `settings` (`tabs`, `activeTab`, `split`).
 
 ## Sincronização do editor
 
@@ -95,6 +102,15 @@ Um cartão de tarefa é um retângulo com `customData = { kind: 'task', taskId }
 Ao abrir o quadro e a cada `data:changed` de tarefas/notas, o editor busca os dados atuais (`briefs:*`) e
 reescreve texto/cores dos cartões fora do histórico de desfazer. O painel de seleção altera o registro real
 (`tasks:update`). Os vínculos `canvas_links` do quadro são derivados dos cartões presentes a cada gravação.
+
+## Janelas
+
+- **Principal** (`#`), **notas flutuantes** (`#sticky/ID`, sem moldura, `alwaysOnTop` opcional) e **sobreposição de
+  captura** (`#capture`, tela cheia) carregam a mesma página com as mesmas preferências seguras (`windows.ts`).
+- O agendador (30 s) no processo principal dispara lembretes/avisos de prazo; usa `Notification` do Electron
+  (requer `app.setAppUserModelId` no Windows) e envia `app:event` para o app.
+- Ao fechar a janela principal, o app grava pendências, fecha as notas flutuantes mantendo-as marcadas como
+  abertas e as reabre na próxima execução.
 
 ## Durabilidade
 

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { openApp, tmpDir } from './helpers';
 import { openDatabase, migrate } from '../src/main/db/connection';
-import { MIGRATIONS } from '../src/main/db/migrations';
+import { MIGRATIONS, LATEST_DB_VERSION } from '../src/main/db/migrations';
 import { sceneText, CANVAS_AUTO_VERSION_MS } from '../src/main/services/canvases';
 import { searchAll } from '../src/main/services/search';
 
@@ -112,7 +112,7 @@ describe('Atualização v2 → v3', () => {
     for (const m of MIGRATIONS.slice(0, 2)) db.transaction(() => { db.exec(m.up); db.pragma(`user_version = ${m.version}`); })();
     db.prepare("INSERT INTO notes (workspace_id, title) VALUES (1, 'da etapa 2')").run();
     const rep = await migrate(db, path.join(dir, 'backups'));
-    expect(rep).toMatchObject({ from: 2, to: 3 });
+    expect(rep).toMatchObject({ from: 2, to: LATEST_DB_VERSION });
     expect(fs.existsSync(rep.backupPath!)).toBe(true);
     expect((db.prepare('SELECT title FROM notes').get() as { title: string }).title).toBe('da etapa 2');
   });

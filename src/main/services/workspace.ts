@@ -4,8 +4,9 @@ import { logHistory } from './history';
 import { TaskService } from './tasks';
 import type { NoteService } from './notes';
 import type { CanvasService } from './canvases';
+import type { AttachmentService } from './attachments';
 
-export interface Services { tasks: TaskService; notes: NoteService; canvases: CanvasService }
+export interface Services { tasks: TaskService; notes: NoteService; canvases: CanvasService; attachments: AttachmentService }
 
 const now = () => new Date().toISOString();
 
@@ -13,6 +14,8 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: 'dark', accent: '#6366f1', uiScale: 1, animations: true, sidebarCollapsed: false, showCompleted: true,
   dashboardPanels: ['stats', 'priority', 'dueSoon', 'notes', 'drawings', 'boards', 'projects', 'shortcuts'].map((id) => ({ id, visible: true })),
   lastView: 'home', activeWorkspaceId: 1, openNotes: [], activeNote: null, openCanvas: { drawing: null, board: null }, wheelZoom: true,
+  notificationsEnabled: true, systemNotifications: true, dueReminderTime: '09:00',
+  tabs: [{ id: 't1', view: 'home' }], activeTab: 't1', split: null,
 };
 
 export class SettingsService {
@@ -117,24 +120,29 @@ export class OrgService {
       UNION ALL
       SELECT 'note', id, CASE WHEN title = '' THEN 'Sem título' ELSE title END, deleted_at FROM notes WHERE workspace_id = ? AND deleted_at IS NOT NULL
       UNION ALL
+      SELECT 'attachment', id, 'Arquivo: ' || name, deleted_at FROM attachments WHERE workspace_id = ? AND deleted_at IS NOT NULL
+      UNION ALL
       SELECT 'canvas', id, (CASE kind WHEN 'board' THEN 'Quadro: ' ELSE 'Desenho: ' END) || CASE WHEN title = '' THEN 'Sem título' ELSE title END, deleted_at FROM canvases WHERE workspace_id = ? AND deleted_at IS NOT NULL
-      ORDER BY deleted_at DESC`).all(this.ws(), this.ws(), this.ws(), this.ws()) as TrashItem[];
+      ORDER BY deleted_at DESC`).all(this.ws(), this.ws(), this.ws(), this.ws(), this.ws()) as TrashItem[];
   }
-  restore(type: TrashItem['entity_type'], id: number, { tasks, notes, canvases }: Services): void {
+  restore(type: TrashItem['entity_type'], id: number, { tasks, notes, canvases, attachments }: Services): void {
+    if (type === 'attachment') return attachments.restore(id);
     if (type === 'task') return tasks.restore(id);
     if (type === 'note') return notes.restore(id);
     if (type === 'canvas') return canvases.restore(id);
     this.db.prepare('UPDATE projects SET deleted_at = NULL WHERE id = ? AND workspace_id = ?').run(id, this.ws());
     logHistory(this.db, this.ws(), 'project', id, 'restaurado');
   }
-  purge(type: TrashItem['entity_type'], id: number, { tasks, notes, canvases }: Services): void {
+  purge(type: TrashItem['entity_type'], id: number, { tasks, notes, canvases, attachments }: Services): void {
+    if (type === 'attachment') return attachments.purge(id);
     if (type === 'task') return tasks.purge(id);
     if (type === 'note') return notes.purge(id);
     if (type === 'canvas') return canvases.purge(id);
     const r = this.db.prepare('DELETE FROM projects WHERE id = ? AND workspace_id = ? AND deleted_at IS NOT NULL').run(id, this.ws());
     if (r.changes) logHistory(this.db, this.ws(), 'project', id, 'excluído permanentemente');
   }
-  emptyTrash(): void {
+  emptyTrash(attachments?: AttachmentService): void {
+    attachments?.purgeAllDeleted();
     this.db.transaction(() => {
       this.db.prepare('DELETE FROM tasks WHERE workspace_id = ? AND deleted_at IS NOT NULL').run(this.ws());
       this.db.prepare('DELETE FROM projects WHERE workspace_id = ? AND deleted_at IS NOT NULL').run(this.ws());

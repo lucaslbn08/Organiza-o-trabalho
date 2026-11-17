@@ -14,7 +14,7 @@ import { dataUrlToBytes, bytesToDataUrl, taskCardLook, titleFromCardText, noteCa
 type El = ExcalidrawElement & { customData?: Record<string, unknown> };
 type FileMap = Record<string, { hash: string; mimeType: string }>;
 interface Scene { elements: El[]; appState: Partial<AppState>; files: FileMap }
-interface Nav { onOpenTask: (id: number) => void; onOpenNote: (id: number) => void; onOpenBoard: (id: number) => void }
+interface Nav { onOpenTask: (id: number) => void; onOpenNote: (id: number) => void; onOpenBoard: (id: number) => void; onOpenFile: (id: number) => void }
 
 const KIND_TITLE: Record<CanvasKind, string> = { drawing: 'desenho', board: 'quadro' };
 const PERSIST_KEYS = ['scrollX', 'scrollY', 'zoom', 'gridModeEnabled', 'gridSize', 'viewBackgroundColor', 'currentItemStrokeColor', 'currentItemBackgroundColor',
@@ -30,7 +30,7 @@ export function CanvasEditor(props: { id: number; settings: Settings; onClose: (
   return <Inner key={`${canvas.id}-${tick}`} canvas={canvas} {...props} onRestored={() => setTick((t) => t + 1)} />;
 }
 
-function Inner({ canvas, settings, onClose, onOpenTask, onOpenNote, onOpenBoard, onRestored }: { canvas: Canvas; settings: Settings; onClose: () => void; onRestored: () => void } & Nav) {
+function Inner({ canvas, settings, onClose, onOpenTask, onOpenNote, onOpenBoard, onOpenFile, onRestored }: { canvas: Canvas; settings: Settings; onClose: () => void; onRestored: () => void } & Nav) {
   const ui = useUi();
   const [xapi, setXapi] = useState<ExcalidrawImperativeAPI | null>(null);
   const [title, setTitle] = useState(canvas.title);
@@ -235,6 +235,29 @@ function Inner({ canvas, settings, onClose, onOpenTask, onOpenNote, onOpenBoard,
     const n = await ui.run(api().notes.create({ title: prompt('Título da nova anotação') ?? '', project_id: canvas.project_id }));
     if (n) insertNote(n.id, noteCardText({ id: n.id, title: n.title, excerpt: '', deleted: false }));
   };
+  /** Referência a arquivo da biblioteca: PDFs entram como imagem da 1ª página (clicável); outros como cartão-link. */
+  const insertFile = async (a: { id: number; name: string; mime: string }) => {
+    if (!xapi) return;
+    await api().files.link(a.id, 'canvas', canvas.id).catch(() => undefined);
+    if (a.mime === 'application/pdf' || a.mime.startsWith('image/')) {
+      try {
+        const { bytes } = await api().files.read(a.id);
+        let png = bytes, mime = a.mime, w = 0, h = 0, pages = 0;
+        if (a.mime === 'application/pdf') { const { pdfPageToPng } = await import('../lib/pdf'); const r = await pdfPageToPng(bytes); png = r.png; mime = 'image/png'; w = r.width; h = r.height; pages = r.pages; }
+        else { const bmp = await createImageBitmap(new Blob([bytes as BlobPart], { type: a.mime })); w = bmp.width; h = bmp.height; }
+        const dataURL = await bytesToDataUrl(png, mime);
+        const fileId = (crypto.randomUUID().replace(/-/g, '')) as BinaryFileData['id'];
+        xapi.addFiles([{ id: fileId, mimeType: mime as BinaryFileData['mimeType'], dataURL: dataURL as BinaryFileData['dataURL'], created: Date.now() }]);
+        const scale = Math.min(1, 360 / w); const { x, y } = freeSpot(w * scale, h * scale);
+        addSkeletons([
+          { type: 'image', x, y, width: w * scale, height: h * scale, fileId, customData: { kind: 'file', attachmentId: a.id } } as unknown as ExcalidrawElementSkeleton,
+          { type: 'text', x, y: y + h * scale + 8, text: `📄 ${a.name}${pages > 1 ? ` (${pages} páginas)` : ''}`, fontSize: 16, customData: { kind: 'file', attachmentId: a.id } } as unknown as ExcalidrawElementSkeleton,
+        ]);
+        return;
+      } catch (e) { ui.toast('Não foi possível gerar a pré-visualização: ' + (e as Error).message, 'error'); }
+    }
+    addSkeletons([card(`📎 ${a.name}`, { backgroundColor: '#f1f3f5', strokeColor: '#495057', customData: { kind: 'file', attachmentId: a.id } } as Partial<ExcalidrawElementSkeleton>, 280, 60)]);
+  };
   const textAt = (text: string, fontSize = 20): ExcalidrawElementSkeleton => { const { x, y } = freeSpot(200, 40); return { type: 'text', x, y, text, fontSize } as ExcalidrawElementSkeleton; };
 
   // ---------- painel da seleção (elementos interativos) ----------
@@ -307,6 +330,7 @@ function Inner({ canvas, settings, onClose, onOpenTask, onOpenNote, onOpenBoard,
             </> : <span className="muted">Tarefa excluída</span>)}
             {sel.customData?.kind === 'note' && <button className="btn" onClick={() => onOpenNote(Number(sel.customData!.noteId))}><ExternalLink size={14} /> Abrir anotação</button>}
             {sel.customData?.kind === 'board' && <button className="btn" onClick={() => onOpenBoard(Number(sel.customData!.boardId))}><ExternalLink size={14} /> Abrir quadro</button>}
+            {sel.customData?.kind === 'file' && <button className="btn" onClick={() => onOpenFile(Number(sel.customData!.attachmentId))}><ExternalLink size={14} /> Abrir arquivo</button>}
             {isChecklist && <div className="sel-check">{checklistLines.map((l, i) => { const m = CHECK_RE.exec(l); return m ? (
               <label key={i} className="row"><input type="checkbox" checked={m[1] === '☑'} onChange={() => toggleLine(i)} /> <span className={m[1] === '☑' ? 'done-text' : ''}>{m[2]}</span></label>) : null; })}</div>}
           </div>
@@ -319,6 +343,7 @@ function Inner({ canvas, settings, onClose, onOpenTask, onOpenNote, onOpenBoard,
           onText={() => addSkeletons([textAt('Texto')])}
           onChecklist={() => addSkeletons([textAt('☐ Primeiro item\n☐ Segundo item\n☐ Terceiro item', 18)])}
           onBoard={(b) => addSkeletons([card(`↗ ${b.title || 'Quadro sem título'}`, { backgroundColor: '#e7f5ff', strokeColor: '#1c7ed6', customData: { kind: 'board', boardId: b.id } } as Partial<ExcalidrawElementSkeleton>, 260, 70)])}
+          onFile={insertFile}
           onFrame={() => { const { x, y } = center(); addSkeletons([{ type: 'frame', x: x - 300, y: y - 200, width: 600, height: 400, children: [], name: 'Grupo' } as unknown as ExcalidrawElementSkeleton]); }}
         />}
         {panel === 'export' && xapi && <ExportPanel xapi={xapi} name={title || 'sem-titulo'} onClose={() => setPanel('none')} />}
@@ -340,10 +365,11 @@ function Floating({ title, onClose, children }: { title: string; onClose: () => 
 
 function InsertPanel(p: { canvasId: number; onClose: () => void; onNewTask: () => void; onTask: (t: TaskBrief) => void; onNewNote: () => void;
   onNote: (n: { id: number; title: string; excerpt: string; deleted: boolean }) => void; onSticky: () => void; onText: () => void; onChecklist: () => void;
-  onBoard: (b: { id: number; title: string }) => void; onFrame: () => void }) {
+  onBoard: (b: { id: number; title: string }) => void; onFrame: () => void; onFile: (a: { id: number; name: string; mime: string }) => void }) {
   const { data: tasks = [] } = useQuery(() => api().tasks.list({ showCompleted: true, sort: 'title' }));
   const { data: notes = [] } = useQuery(() => api().notes.list({}));
   const { data: boards = [] } = useQuery(() => api().canvases.list('board'));
+  const { data: files = [] } = useQuery(() => api().files.list({}));
   return (
     <Floating title="Inserir no quadro" onClose={p.onClose}>
       <div className="insert-grid">
@@ -360,6 +386,8 @@ function InsertPanel(p: { canvasId: number; onClose: () => void; onNewTask: () =
         <option value="">Anotação existente…</option>{notes.map((n) => <option key={n.id} value={n.id}>{n.title || 'Sem título'}</option>)}</select>
       <select value="" onChange={(e) => { const b = boards.find((x) => x.id === Number(e.target.value)); if (b) p.onBoard(b); }}>
         <option value="">Link para outro quadro…</option>{boards.filter((b) => b.id !== p.canvasId).map((b) => <option key={b.id} value={b.id}>{b.title || 'Sem título'}</option>)}</select>
+      <select value="" onChange={(e) => { const f = files.find((x) => x.id === Number(e.target.value)); if (f) p.onFile(f); }}>
+        <option value="">PDF, imagem ou link para arquivo…</option>{files.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}</select>
       <small className="muted">Formas, setas, conectores, desenho livre e imagens ficam na barra de ferramentas. Imagens e capturas também podem ser coladas (Ctrl+V).</small>
     </Floating>
   );

@@ -8,9 +8,9 @@ import { NoteEditor } from '../components/NoteEditor';
 
 type Filter = { kind: 'all' } | { kind: 'fav' } | { kind: 'root' } | { kind: 'folder'; id: number } | { kind: 'tag'; name: string };
 
-export function NotesView({ settings, openNote, closeNote, onOpenTask, openCanvas, newCanvas }: {
+export function NotesView({ settings, openNote, closeNote, onOpenTask, openCanvas, newCanvas, onOpenFile }: {
   settings: Settings; openNote: (id: number) => void; closeNote: (id: number) => void; onOpenTask: (id: number) => void;
-  openCanvas: (k: 'drawing' | 'board', id: number) => void; newCanvas: (k: 'drawing' | 'board', noteId: number) => void;
+  openCanvas: (k: 'drawing' | 'board', id: number) => void; newCanvas: (k: 'drawing' | 'board', noteId: number) => void; onOpenFile: (id: number) => void;
 }) {
   const ui = useUi();
   const [filter, setFilter] = useState<Filter>({ kind: 'all' });
@@ -122,9 +122,9 @@ export function NotesView({ settings, openNote, closeNote, onOpenTask, openCanva
           <button className={`icon ${split ? 'active' : ''}`} title="Lado a lado (mostra as duas últimas abas)" disabled={open.length < 2} onClick={() => setSplit(!split)}><Columns2 size={16} /></button>
         </div>
         <div className={`editors ${second ? 'split' : ''}`}>
-          {active ? <NoteEditor id={active} openCanvas={openCanvas} newCanvas={newCanvas} onOpenTask={onOpenTask} onClose={() => closeNote(active)} /> :
+          {active ? <NoteEditor id={active} openCanvas={openCanvas} newCanvas={newCanvas} onOpenFile={onOpenFile} onOpenTask={onOpenTask} onClose={() => closeNote(active)} /> :
             <div className="empty">Selecione uma anotação ou <button className="link" onClick={create}>crie uma nova</button>.</div>}
-          {second && <NoteEditor id={second} openCanvas={openCanvas} newCanvas={newCanvas} onOpenTask={onOpenTask} onClose={() => closeNote(second)} />}
+          {second && <NoteEditor id={second} openCanvas={openCanvas} newCanvas={newCanvas} onOpenFile={onOpenFile} onOpenTask={onOpenTask} onClose={() => closeNote(second)} />}
         </div>
       </section>
     </div>
