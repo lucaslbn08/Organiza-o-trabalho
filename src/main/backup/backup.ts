@@ -92,10 +92,12 @@ export async function exportBackup(opts: {
     onProgress?.({ phase: 'banco', done: 0, total: 1 });
     await db.backup(snap);
     const snapDb = new Database(snap, { readonly: true });
-    const counts = countData(snapDb);
-    const linked = (() => { try { return snapDb.prepare("SELECT id, name, stored_path AS path FROM attachments WHERE mode = 'link' AND deleted_at IS NULL").all() as { id: number; name: string; path: string }[]; } catch { return []; } })();
-    const dbVersion = snapDb.pragma('user_version', { simple: true }) as number;
-    snapDb.close();
+    let counts: Record<string, number>, linked: { id: number; name: string; path: string }[], dbVersion: number;
+    try {
+      counts = countData(snapDb);
+      linked = (() => { try { return snapDb.prepare("SELECT id, name, stored_path AS path FROM attachments WHERE mode = 'link' AND deleted_at IS NULL").all() as { id: number; name: string; path: string }[]; } catch { return []; } })();
+      dbVersion = snapDb.pragma('user_version', { simple: true }) as number;
+    } finally { snapDb.close(); }
 
     // 2) inventário
     const entries: { zip: string; abs: string }[] = [{ zip: DB_ENTRY, abs: snap }];
@@ -225,11 +227,12 @@ export async function verifyBackup(file: string, tmpDir: string): Promise<Verify
     if (fs.existsSync(tmpDb) && !r.errors.some((x) => x.includes(DB_ENTRY))) {
       try {
         const d = new Database(tmpDb, { readonly: true, fileMustExist: true });
-        const ic = d.pragma('integrity_check', { simple: true });
-        if (ic !== 'ok') r.errors.push('Banco de dados do backup falhou na verificação de integridade: ' + ic);
-        if ((d.pragma('user_version', { simple: true }) as number) !== m.dbVersion) r.errors.push('Versão do banco não confere com o manifesto.');
-        r.counts = countData(d);
-        d.close();
+        try {
+          const ic = d.pragma('integrity_check', { simple: true });
+          if (ic !== 'ok') r.errors.push('Banco de dados do backup falhou na verificação de integridade: ' + ic);
+          if ((d.pragma('user_version', { simple: true }) as number) !== m.dbVersion) r.errors.push('Versão do banco não confere com o manifesto.');
+          r.counts = countData(d);
+        } finally { d.close(); }
       } catch (e) { r.errors.push('Não foi possível abrir o banco do backup: ' + (e as Error).message); }
     }
     if (m.linkedNotIncluded?.length) r.warnings.push(`${m.linkedNotIncluded.length} arquivo(s) apenas vinculado(s) não estão no backup (somente o caminho original foi guardado).`);
@@ -358,8 +361,10 @@ export function applyPendingRestore(dataDir: string): RestoreResult | null {
       if (fs.existsSync(cur)) { fs.renameSync(cur, path.join(previousDir, it)); moved.push(it); writeJsonAtomic(markerFile, { ...pending, swapping: { previousDir, moved } }); }
     }
     for (const it of items) fs.renameSync(path.join(pending.staging, it), path.join(dataDir, it));
+    // fecha o banco mesmo se a verificação falhar: no Windows um arquivo aberto não pode ser movido/apagado
+    let ic: unknown;
     const db = new Database(path.join(dataDir, 'data', 'workspace.sqlite'), { fileMustExist: true });
-    const ic = db.pragma('integrity_check', { simple: true }); db.close();
+    try { ic = db.pragma('integrity_check', { simple: true }); } finally { db.close(); }
     if (ic !== 'ok') throw new Error('integridade: ' + ic);
     fs.rmSync(pending.staging, { recursive: true, force: true });
     fs.rmSync(markerFile, { force: true });
