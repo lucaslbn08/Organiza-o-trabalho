@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { openApp, tmpDir } from './helpers';
 import { openDatabase, migrate } from '../src/main/db/connection';
-import { MIGRATIONS } from '../src/main/db/migrations';
+import { MIGRATIONS, LATEST_DB_VERSION } from '../src/main/db/migrations';
 import { extractText, ftsQuery, AUTO_VERSION_INTERVAL_MS } from '../src/main/services/notes';
 import { searchAll } from '../src/main/services/search';
 
@@ -97,7 +97,7 @@ describe('Anotações', () => {
   });
 
   it('vincula a tarefas e projetos, duplica e usa a lixeira', async () => {
-    const { notes, tasks, org } = await openApp(':memory:');
+    const { notes, tasks, org, svc } = await openApp(':memory:');
     const pr = org.createProject({ name: 'P' });
     const t = tasks.create({ title: 'Tarefa', project_id: pr.id });
     const n = notes.create({ title: 'Nota', project_id: pr.id, task_id: t.id });
@@ -109,7 +109,7 @@ describe('Anotações', () => {
     notes.remove(n.id);
     expect(notes.list()).toHaveLength(1);
     expect(org.trash().find((x) => x.entity_type === 'note')?.title).toBe('Nota');
-    org.restore('note', n.id, tasks, notes);
+    org.restore('note', n.id, svc);
     expect(notes.list()).toHaveLength(2);
     notes.remove(n.id); org.emptyTrash();
     expect(notes.list({ search: 'Nota' }).map((x) => x.id)).toEqual([c.id]); // índice FTS limpo
@@ -139,7 +139,7 @@ describe('Atualização v1 → v2', () => {
     db.transaction(() => { db.exec(MIGRATIONS[0].up); db.pragma('user_version = 1'); })();
     db.prepare("INSERT INTO tasks (workspace_id, title) VALUES (1, 'da etapa 1')").run();
     const rep = await migrate(db, path.join(dir, 'backups'));
-    expect(rep).toMatchObject({ from: 1, to: 2 });
+    expect(rep).toMatchObject({ from: 1, to: LATEST_DB_VERSION });
     expect(fs.existsSync(rep.backupPath!)).toBe(true);
     expect((db.prepare('SELECT title FROM tasks').get() as { title: string }).title).toBe('da etapa 1');
     const bk = openDatabase(rep.backupPath!);

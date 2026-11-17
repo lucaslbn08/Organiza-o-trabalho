@@ -1,21 +1,22 @@
 {
   "name": "workspace",
   "productName": "Workspace",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Workspace — organização pessoal offline para Windows",
   "main": "dist/main/main/index.js",
   "license": "UNLICENSED",
   "private": true,
   "scripts": {
-    "dev": "npm run build:main && concurrently -k \"vite\" \"wait-on tcp:5173 && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .\"",
+    "dev": "npm run assets && npm run build:main && concurrently -k \"vite\" \"wait-on tcp:5173 && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .\"",
     "build:main": "tsc -p tsconfig.main.json",
     "build:renderer": "vite build",
-    "build": "npm run build:main && npm run build:renderer",
+    "build": "npm run assets && npm run build:main && npm run build:renderer",
     "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.renderer.json --noEmit",
     "test": "vitest run",
     "rebuild:electron": "electron-builder install-app-deps",
     "dist:win": "npm run build && electron-builder --win nsis",
-    "postinstall": "echo \"Para rodar no Electron execute: npm run rebuild:electron\""
+    "postinstall": "echo \"Para rodar no Electron execute: npm run rebuild:electron\"",
+    "assets": "node scripts/copy-assets.mjs"
   },
   "build": {
     "appId": "br.local.workspace",
@@ -45,6 +46,7 @@
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
+    "@excalidraw/excalidraw": "^0.18.1",
     "@tiptap/extension-highlight": "^3.34.0",
     "@tiptap/extension-image": "^3.34.0",
     "@tiptap/extension-list": "^3.34.0",
@@ -62,6 +64,7 @@
     "cross-env": "^10.1.0",
     "electron": "^45.3.3",
     "electron-builder": "^26.18.0",
+    "jspdf": "^4.2.1",
     "lucide-react": "^1.74.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",

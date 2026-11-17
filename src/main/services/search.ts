@@ -6,7 +6,7 @@ import { ftsQuery } from './notes';
 const like = (q: string) => `%${q.replace(/[%_\\]/g, (c) => '\\' + c)}%`;
 
 /** Pesquisa universal (Ctrl+K): tarefas, notas (texto completo), projetos e etiquetas. */
-export function searchAll(db: DB, ws: number, q: string, types: SearchType[] = ['task', 'note', 'project', 'tag'], limit = 15): SearchHit[] {
+export function searchAll(db: DB, ws: number, q: string, types: SearchType[] = ['task', 'note', 'project', 'tag', 'drawing', 'board'], limit = 15): SearchHit[] {
   const query = q.trim();
   if (!query) return [];
   const s = like(query);
@@ -31,6 +31,12 @@ export function searchAll(db: DB, ws: number, q: string, types: SearchType[] = [
     const rows = db.prepare(`SELECT g.id, g.name, (SELECT COUNT(*) FROM task_tags x WHERE x.tag_id = g.id) + (SELECT COUNT(*) FROM note_tags y WHERE y.tag_id = g.id) AS n
       FROM tags g WHERE g.workspace_id = ? AND g.name LIKE ? ESCAPE '\\' LIMIT ?`).all(ws, s, limit) as { id: number; name: string; n: number }[];
     hits.push(...rows.map((r) => ({ type: 'tag' as const, id: r.id, title: '#' + r.name, snippet: `${r.n} item(ns)` })));
+  }
+  for (const kind of ['drawing', 'board'] as const) {
+    if (!types.includes(kind)) continue;
+    const rows = db.prepare(`SELECT id, title, substr(content_text, 1, 120) AS t FROM canvases WHERE workspace_id = ? AND kind = ? AND deleted_at IS NULL
+      AND (title LIKE ? ESCAPE '\\' OR content_text LIKE ? ESCAPE '\\') ORDER BY updated_at DESC LIMIT ?`).all(ws, kind, s, s, limit) as { id: number; title: string; t: string }[];
+    hits.push(...rows.map((r) => ({ type: kind, id: r.id, title: r.title || 'Sem título', snippet: r.t })));
   }
   return hits;
 }

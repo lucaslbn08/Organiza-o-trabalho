@@ -15,7 +15,7 @@ export function TrashView() {
         <table className="table"><thead><tr><th>Tipo</th><th>Item</th><th>Excluído em</th><th /></tr></thead><tbody>
           {items.map((i) => (
             <tr key={i.entity_type + i.id}>
-              <td>{({ task: 'Tarefa', project: 'Projeto', note: 'Anotação' } as const)[i.entity_type]}</td><td>{i.title}</td><td>{fmtDateTime(i.deleted_at)}</td>
+              <td>{({ task: 'Tarefa', project: 'Projeto', note: 'Anotação', canvas: 'Desenho/quadro' } as const)[i.entity_type]}</td><td>{i.title}</td><td>{fmtDateTime(i.deleted_at)}</td>
               <td className="row end">
                 <button className="btn" onClick={() => ui.run(api().trash.restore(i.entity_type, i.id), 'Restaurado')}><RotateCcw size={14} /> Restaurar</button>
                 <button className="btn danger" onClick={async () => { if (await ui.confirm(`Excluir "${i.title}" permanentemente?`, true)) ui.run(api().trash.purge(i.entity_type, i.id)); }}><Trash2 size={14} /></button>
@@ -27,15 +27,15 @@ export function TrashView() {
   );
 }
 
-const ENTITY: Record<string, string> = { task: 'Tarefa', project: 'Projeto', workspace: 'Espaço', trash: 'Lixeira', note: 'Anotação', folder: 'Pasta' };
-export function HistoryView({ onOpen, openNote }: { onOpen: (id: number) => void; openNote: (id: number) => void }) {
+const ENTITY: Record<string, string> = { task: 'Tarefa', project: 'Projeto', workspace: 'Espaço', trash: 'Lixeira', note: 'Anotação', folder: 'Pasta', drawing: 'Desenho', board: 'Quadro' };
+export function HistoryView({ onOpen, openNote, openCanvas }: { onOpen: (id: number) => void; openNote: (id: number) => void; openCanvas: (k: 'drawing' | 'board', id: number) => void }) {
   const { data: h = [] } = useQuery(() => api().history.list(300));
   return (
     <div className="view">
       <header className="view-h"><h2>Histórico de alterações</h2></header>
       <table className="table"><tbody>
         {h.map((e) => (
-          <tr key={e.id} className={['task', 'note'].includes(e.entity_type) ? 'clickable' : ''} onClick={() => { if (e.entity_type === 'task') onOpen(e.entity_id); else if (e.entity_type === 'note') openNote(e.entity_id); }}>
+          <tr key={e.id} className={['task', 'note', 'drawing', 'board'].includes(e.entity_type) ? 'clickable' : ''} onClick={() => { if (e.entity_type === 'task') onOpen(e.entity_id); else if (e.entity_type === 'note') openNote(e.entity_id); else if (e.entity_type === 'drawing' || e.entity_type === 'board') openCanvas(e.entity_type, e.entity_id); }}>
             <td className="muted nowrap">{fmtDateTime(e.created_at)}</td><td>{ENTITY[e.entity_type] ?? e.entity_type} #{e.entity_id}</td><td>{e.action}</td><td className="muted">{e.details}</td>
           </tr>))}
       </tbody></table>

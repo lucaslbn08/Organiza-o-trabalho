@@ -38,10 +38,12 @@ export function ProjectsView({ go }: { go: (v: string, arg?: number) => void }) 
   );
 }
 
-export function ProjectDetailView({ id, settings, go, onOpen, openNote, newNote }: { id: number; settings: Settings; go: (v: string) => void; onOpen: (id: number) => void; onQuickAdd: () => void; openNote: (id: number) => void; newNote: (projectId: number) => void }) {
+export function ProjectDetailView({ id, settings, go, onOpen, openNote, newNote, openCanvas, newCanvas }: { id: number; settings: Settings; go: (v: string) => void; onOpen: (id: number) => void; onQuickAdd: () => void; openNote: (id: number) => void; newNote: (projectId: number) => void; openCanvas: (k: 'drawing' | 'board', id: number) => void; newCanvas: (k: 'drawing' | 'board', extra: { project_id: number }) => void }) {
   const ui = useUi();
   const { data: projects = [] } = useQuery(() => api().projects.list());
   const { data: notes = [] } = useQuery(() => api().notes.list({ project_id: id }), [id]);
+  const { data: drawings = [] } = useQuery(() => api().canvases.list('drawing', { project_id: id }), [id]);
+  const { data: boards = [] } = useQuery(() => api().canvases.list('board', { project_id: id }), [id]);
   const p = projects.find((x) => x.id === id);
   if (!p) return <div className="view"><button className="btn" onClick={() => go('projects')}><ArrowLeft size={16} /> Projetos</button></div>;
   return (
@@ -52,7 +54,9 @@ export function ProjectDetailView({ id, settings, go, onOpen, openNote, newNote 
         <textarea rows={2} defaultValue={p.description} placeholder="Descrição do projeto" onBlur={(e) => e.target.value !== p.description && ui.run(api().projects.update(p.id, { description: e.target.value }))} />
         <h4 className="row">Anotações do projeto <button className="btn" onClick={() => newNote(p.id)}><Plus size={14} /> Nova</button></h4>
         {notes.length ? <ul className="mini-list">{notes.map((n) => <li key={n.id} onClick={() => openNote(n.id)}><span className="task-title">{n.title || 'Sem título'}</span><small className="muted">{fmtDateTime(n.updated_at)}</small></li>)}</ul> : <p className="muted">Nenhuma anotação neste projeto.</p>}
-        <small className="muted">Desenhos, quadros e arquivos do projeto serão reunidos aqui nas próximas etapas.</small>
+        <h4 className="row">Desenhos e quadros <button className="btn" onClick={() => newCanvas('drawing', { project_id: p.id })}><Plus size={14} /> Desenho</button><button className="btn" onClick={() => newCanvas('board', { project_id: p.id })}><Plus size={14} /> Quadro</button></h4>
+        {drawings.length + boards.length ? <ul className="mini-list">{[...boards, ...drawings].map((c) => <li key={c.kind + c.id} onClick={() => openCanvas(c.kind, c.id)}><small className="muted">{c.kind === 'board' ? 'Quadro' : 'Desenho'}</small><span className="task-title">{c.title || 'Sem título'}</span></li>)}</ul> : <p className="muted">Nenhum desenho ou quadro neste projeto.</p>}
+        <small className="muted">Arquivos do projeto serão reunidos aqui na Etapa 4.</small>
       </div>
       <TasksView settings={settings} projectId={p.id} onOpen={onOpen} onQuickAdd={async () => { const t = await ui.run(api().tasks.create({ title: 'Nova tarefa', project_id: p.id })); if (t) onOpen(t.id); }} />
     </div>

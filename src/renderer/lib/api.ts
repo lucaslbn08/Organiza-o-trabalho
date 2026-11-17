@@ -19,6 +19,7 @@ export function useQuery<T>(fn: () => Promise<T>, deps: unknown[] = []): { data:
 
 /** Registro global de gravações pendentes: o processo principal pede `flushAll` antes de fechar a janela. */
 const flushers = new Set<() => Promise<void>>();
+export function registerFlusher(f: () => Promise<void>): () => void { flushers.add(f); return () => { flushers.delete(f); }; }
 export async function flushAll(): Promise<void> { await Promise.allSettled([...flushers].map((f) => f())); }
 
 /** Salvamento automático com debounce; descarrega pendências ao desmontar e ao fechar o app. */

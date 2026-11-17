@@ -165,6 +165,48 @@ CREATE TRIGGER notes_au AFTER UPDATE OF title, content_text ON notes BEGIN
 END;
 `,
   },
+  {
+    version: 3,
+    name: 'desenhos e quadros infinitos: cenas editáveis, versões e vínculos',
+    up: `
+CREATE TABLE canvases (
+  id INTEGER PRIMARY KEY,
+  workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('drawing','board')),
+  title TEXT NOT NULL DEFAULT '',
+  scene_json TEXT NOT NULL DEFAULT '{"elements":[],"appState":{},"files":{}}' CHECK (json_valid(scene_json)),
+  content_text TEXT NOT NULL DEFAULT '',
+  thumbnail TEXT,
+  revision INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  opened_at TEXT,
+  deleted_at TEXT
+);
+CREATE INDEX idx_canvases_ws ON canvases(workspace_id, kind, deleted_at, updated_at);
+CREATE TABLE canvas_versions (
+  id INTEGER PRIMARY KEY,
+  canvas_id INTEGER NOT NULL REFERENCES canvases(id) ON DELETE CASCADE,
+  title TEXT NOT NULL, scene_json TEXT NOT NULL, reason TEXT NOT NULL DEFAULT 'auto',
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+CREATE INDEX idx_canvas_versions ON canvas_versions(canvas_id, id);
+CREATE TABLE canvas_links (
+  canvas_id INTEGER NOT NULL REFERENCES canvases(id) ON DELETE CASCADE,
+  target_type TEXT NOT NULL CHECK (target_type IN ('task','note')),
+  target_id INTEGER NOT NULL,
+  PRIMARY KEY (canvas_id, target_type, target_id)
+);
+CREATE INDEX idx_canvas_links_target ON canvas_links(target_type, target_id);
+CREATE TRIGGER canvas_links_task_del AFTER DELETE ON tasks BEGIN
+  DELETE FROM canvas_links WHERE target_type = 'task' AND target_id = old.id;
+END;
+CREATE TRIGGER canvas_links_note_del AFTER DELETE ON notes BEGIN
+  DELETE FROM canvas_links WHERE target_type = 'note' AND target_id = old.id;
+END;
+`,
+  },
 ];
 
 export const LATEST_DB_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

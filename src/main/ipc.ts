@@ -1,4 +1,7 @@
-import { ipcMain, BrowserWindow, shell } from 'electron';
+import { ipcMain, BrowserWindow, shell, dialog } from 'electron';
+import fs from 'node:fs';
+import path from 'node:path';
+import { CanvasService } from './services/canvases';
 import { z } from 'zod';
 import type { DB } from './db/connection';
 import { checkIntegrity, getUserVersion } from './db/connection';
@@ -37,8 +40,12 @@ const settingsPatch = z.object({
   dashboardPanels: z.array(z.object({ id: z.string().max(40), visible: z.boolean() })).max(30),
   lastView: z.string().max(40), activeWorkspaceId: id,
   openNotes: z.array(id).max(30), activeNote: id.nullable(),
+  openCanvas: z.object({ drawing: id.nullable(), board: id.nullable() }), wheelZoom: z.boolean(),
 }).partial();
-const trashType = z.enum(['task', 'project', 'note']);
+const trashType = z.enum(['task', 'project', 'note', 'canvas']);
+const sceneJson = z.string().max(200_000_000);
+const kind = z.enum(['drawing', 'board']);
+const linkType = z.enum(['task', 'note']);
 const docJson = z.string().max(50_000_000).refine((v) => { try { return JSON.parse(v)?.type === 'doc'; } catch { return false; } }, 'documento inválido');
 const notePatch = z.object({
   title: z.string().max(500).optional(), content_json: docJson.optional(), folder_id: id.nullable().optional(),
@@ -53,6 +60,8 @@ export function registerIpc(ctx: IpcContext): void {
   const org = new OrgService(ctx.db, ctx.ws);
   const settings = new SettingsService(ctx.db);
   const notes = new NoteService(ctx.db, ctx.ws);
+  const canvases = new CanvasService(ctx.db, ctx.ws);
+  const svc = { tasks, notes, canvases };
 
   const notify = (scope: string) => BrowserWindow.getAllWindows().forEach((w) => w.webContents.send('data:changed', scope));
 
@@ -116,11 +125,11 @@ export function registerIpc(ctx: IpcContext): void {
   handle('kanban:columns', [], () => org.columns());
   handle('kanban:updateColumn', [id, z.object({ title: z.string().max(60).optional(), color: color.optional(), visible: z.boolean().optional() })], (i, p) => org.updateColumn(i, p), 'kanban');
 
-  handle('dashboard:stats', [], () => org.dashboard(tasks, notes));
+  handle('dashboard:stats', [], () => org.dashboard(svc));
   handle('history:list', [z.number().int().optional()], (l) => listHistory(ctx.db, ctx.ws(), l ?? 200));
   handle('trash:list', [], () => org.trash());
-  handle('trash:restore', [trashType, id], (t, i) => org.restore(t, i, tasks, notes), 'trash');
-  handle('trash:purge', [trashType, id], (t, i) => org.purge(t, i, tasks, notes), 'trash');
+  handle('trash:restore', [trashType, id], (t, i) => org.restore(t, i, svc), 'trash');
+  handle('trash:purge', [trashType, id], (t, i) => org.purge(t, i, svc), 'trash');
   handle('trash:empty', [], () => org.emptyTrash(), 'trash');
   const noteQuery = z.object({
     search: z.string().max(200).optional(), folder_id: id.nullable().optional(), project_id: id.optional(), task_id: id.optional(),
@@ -144,7 +153,42 @@ export function registerIpc(ctx: IpcContext): void {
   handle('notes:moveFolder', [id, id.nullable()], (i, p) => notes.moveFolder(i, p), 'folders');
   handle('notes:removeFolder', [id], (i) => notes.removeFolder(i), 'folders');
   handle('media:save', [z.instanceof(Uint8Array), z.string().max(40)], (b, m) => ctx.media.save(b, m));
-  handle('search:query', [z.string().max(200), z.array(z.enum(['task', 'note', 'project', 'tag'])).optional()], (q, t) => searchAll(ctx.db, ctx.ws(), q, t));
+  handle('search:query', [z.string().max(200), z.array(z.enum(['task', 'note', 'project', 'tag', 'drawing', 'board'])).optional()], (q, t) => searchAll(ctx.db, ctx.ws(), q, t));
+  handle('media:get', [z.string().regex(/^[0-9a-f]{64}$/)], (h) => { const m = ctx.media.get(h); return m ? { mime: m.mime, bytes: new Uint8Array(m.data) } : null; });
+
+  const canvasQuery = z.object({ search: z.string().max(200).optional(), project_id: id.optional(), task_id: id.optional(), note_id: id.optional() });
+  handle('canvases:list', [kind, canvasQuery.optional()], (k, q) => canvases.list(k, q ?? {}));
+  handle('canvases:get', [id], (i) => canvases.get(i));
+  handle('canvases:create', [z.object({ kind, title: z.string().max(300).optional(), project_id: id.nullable().optional(), task_id: id.optional(), note_id: id.optional() })], (i) => canvases.create(i), 'canvases');
+  handle('canvases:update', [id, z.object({ title: z.string().max(300).optional(), scene_json: sceneJson.optional(), project_id: id.nullable().optional(), thumbnail: z.string().regex(/^ws-media:\/\/[0-9a-f]{64}$/).nullable().optional() })], (i, p) => canvases.update(i, p), 'canvases');
+  handle('canvases:duplicate', [id], (i) => canvases.duplicate(i), 'canvases');
+  handle('canvases:remove', [id], (i) => canvases.remove(i), 'canvases');
+  handle('canvases:touch', [id], (i) => canvases.touch(i));
+  handle('canvases:link', [id, linkType, id], (i, t, x) => canvases.link(i, t, x), 'canvases');
+  handle('canvases:unlink', [id, linkType, id], (i, t, x) => canvases.unlink(i, t, x), 'canvases');
+  handle('canvases:versions', [id], (i) => canvases.versions(i));
+  handle('canvases:snapshot', [id], (i) => canvases.snapshot(i), 'canvases');
+  handle('canvases:restoreVersion', [id], (i) => canvases.restoreVersion(i), 'canvases');
+  handle('briefs:tasks', [z.array(id).max(5000)], (ids) => canvases.taskBriefs(ids));
+  handle('briefs:notes', [z.array(id).max(5000)], (ids) => canvases.noteBriefs(ids));
+
+  /** Exportação: o usuário escolhe destino; gravação atômica (arquivo temporário + rename). */
+  handle('files:saveAs', [z.instanceof(Uint8Array), z.string().max(200), z.enum(['png', 'pdf'])], async (bytes, name, ext) => {
+    const win = BrowserWindow.getFocusedWindow();
+    const opts = { defaultPath: name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_') + '.' + ext, filters: [{ name: ext.toUpperCase(), extensions: [ext] }] };
+    const r = win ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts);
+    if (r.canceled || !r.filePath) return null;
+    const target = path.extname(r.filePath).toLowerCase() === '.' + ext ? r.filePath : r.filePath + '.' + ext;
+    const tmp = target + '.tmp-' + process.pid;
+    try {
+      await fs.promises.writeFile(tmp, bytes);
+      await fs.promises.rename(tmp, target);
+    } catch (e) {
+      await fs.promises.rm(tmp, { force: true });
+      throw new Error((e as NodeJS.ErrnoException).code === 'ENOSPC' ? 'Espaço em disco insuficiente.' : 'Não foi possível gravar o arquivo: ' + (e as Error).message);
+    }
+    return target;
+  });
   handle('db:checkIntegrity', [], () => checkIntegrity(ctx.db));
 
   // links externos de tarefas: somente http(s)/mailto, abertos no navegador padrão

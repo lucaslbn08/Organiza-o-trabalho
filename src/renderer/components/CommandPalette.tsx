@@ -5,11 +5,11 @@ import { highlight } from '../lib/text';
 
 export interface Command { id: string; label: string; hint?: string; run: () => void }
 type Result = { kind: 'cmd'; c: Command } | { kind: 'hit'; h: SearchHit };
-const KIND: Record<SearchType, string> = { task: 'Tarefa', note: 'Anotação', project: 'Projeto', tag: 'Etiqueta' };
-const FILTERS = [['all', 'Tudo'], ['task', 'Tarefas'], ['note', 'Anotações'], ['project', 'Projetos'], ['tag', 'Etiquetas'], ['cmd', 'Comandos']] as const;
+const KIND: Record<SearchType, string> = { task: 'Tarefa', note: 'Anotação', project: 'Projeto', tag: 'Etiqueta', drawing: 'Desenho', board: 'Quadro' };
+const FILTERS = [['all', 'Tudo'], ['task', 'Tarefas'], ['note', 'Anotações'], ['project', 'Projetos'], ['tag', 'Etiquetas'], ['drawing', 'Desenhos'], ['board', 'Quadros'], ['cmd', 'Comandos']] as const;
 
-export function CommandPalette({ commands, onClose, openTask, openProject, openNote }: {
-  commands: Command[]; onClose: () => void; openTask: (id: number) => void; openProject: (id: number) => void; openNote: (id: number) => void;
+export function CommandPalette({ commands, onClose, openTask, openProject, openNote, openCanvas }: {
+  commands: Command[]; onClose: () => void; openTask: (id: number) => void; openProject: (id: number) => void; openNote: (id: number) => void; openCanvas: (k: 'drawing' | 'board', id: number) => void;
 }) {
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<(typeof FILTERS)[number][0]>('all');
@@ -18,7 +18,7 @@ export function CommandPalette({ commands, onClose, openTask, openProject, openN
 
   useEffect(() => {
     let alive = true;
-    const types: SearchType[] = filter === 'all' ? ['task', 'note', 'project', 'tag'] : filter === 'cmd' ? [] : [filter];
+    const types: SearchType[] = filter === 'all' ? ['task', 'note', 'project', 'tag', 'drawing', 'board'] : filter === 'cmd' ? [] : [filter];
     const h = setTimeout(async () => {
       const r = q.trim() && filter !== 'cmd' ? await api().search.query(q, types).catch(() => [] as SearchHit[]) : [];
       if (alive) { setHits(r); setSel(0); }
@@ -36,7 +36,7 @@ export function CommandPalette({ commands, onClose, openTask, openProject, openN
     onClose();
     if (r.kind === 'cmd') return r.c.run();
     const { type, id, title } = r.h;
-    if (type === 'task') openTask(id); else if (type === 'note') openNote(id); else if (type === 'project') openProject(id);
+    if (type === 'task') openTask(id); else if (type === 'note') openNote(id); else if (type === 'project') openProject(id); else if (type === 'drawing' || type === 'board') openCanvas(type, id);
     else { setQ(title); }
   };
   return (
@@ -62,7 +62,7 @@ export function CommandPalette({ commands, onClose, openTask, openProject, openN
             </li>
           ))}
         </ul>
-        <small className="muted">Desenhos, quadros e arquivos entrarão na pesquisa nas Etapas 3 e 4.</small>
+        <small className="muted">Arquivos anexados entrarão na pesquisa na Etapa 4.</small>
       </div>
     </div>
   );

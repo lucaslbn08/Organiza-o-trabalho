@@ -5,12 +5,13 @@ import { api, useQuery } from '../lib/api';
 import { useUi } from '../lib/ui';
 import { PriorityDot, TaskMeta } from '../components/TaskBits';
 import { fmtDateTime } from '../lib/api';
+import { MediaImg } from '../components/MediaImg';
 
 const PANEL_TITLES: Record<string, string> = {
-  stats: 'Resumo das tarefas', priority: 'Prioritárias', dueSoon: 'Prazos próximos e atrasadas', projects: 'Projetos recentes', notes: 'Anotações recentes', shortcuts: 'Atalhos',
+  stats: 'Resumo das tarefas', priority: 'Prioritárias', dueSoon: 'Prazos próximos e atrasadas', projects: 'Projetos recentes', notes: 'Anotações recentes', drawings: 'Últimos desenhos', boards: 'Quadros infinitos', shortcuts: 'Atalhos',
 };
 
-export function HomeView({ settings, onOpen, onQuickAdd, go, openNote, newNote }: { settings: Settings; onOpen: (id: number) => void; onQuickAdd: () => void; go: (v: string, arg?: number) => void; openNote: (id: number) => void; newNote: () => void }) {
+export function HomeView({ settings, onOpen, onQuickAdd, go, openNote, newNote, openCanvas }: { settings: Settings; onOpen: (id: number) => void; onQuickAdd: () => void; go: (v: string, arg?: number) => void; openNote: (id: number) => void; newNote: () => void; openCanvas: (k: 'drawing' | 'board', id: number | null) => void }) {
   const ui = useUi();
   const { data: s } = useQuery(() => api().dashboard.stats());
   const [customize, setCustomize] = useState(false);
@@ -34,6 +35,8 @@ export function HomeView({ settings, onOpen, onQuickAdd, go, openNote, newNote }
     dueSoon: <>{s.overdue.length > 0 && <><h5 className="danger-text">Atrasadas</h5>{list(s.overdue, '')}</>}<h5>Próximos 7 dias</h5>{list(s.dueSoon, 'Nenhum prazo nos próximos 7 dias.')}</>,
     projects: s.recentProjects.length ? <ul className="mini-list">{s.recentProjects.map((p) => <li key={p.id} onClick={() => go('project', p.id)}><span className="dot" style={{ background: p.color }} />{p.name}</li>)}</ul> : <p className="muted">Nenhum projeto ainda. <button className="link" onClick={() => go('projects')}>Criar projeto</button></p>,
     notes: s.recentNotes.length ? <ul className="mini-list">{s.recentNotes.map((n) => <li key={n.id} onClick={() => openNote(n.id)}><span className="task-title">{n.title || 'Sem título'}</span><small className="muted">{fmtDateTime(n.updated_at)}</small></li>)}</ul> : <p className="muted">Nenhuma anotação ainda. <button className="link" onClick={newNote}>Criar anotação</button></p>,
+    drawings: s.recentDrawings.length ? <div className="mini-thumbs">{s.recentDrawings.map((c) => <button key={c.id} onClick={() => openCanvas('drawing', c.id)} title={c.title}><MediaImg src={c.thumbnail} alt="" /><small className="ellipsis">{c.title || 'Sem título'}</small></button>)}</div> : <p className="muted">Nenhum desenho. <button className="link" onClick={() => go('drawings')}>Abrir desenhos</button></p>,
+    boards: s.recentBoards.length ? <ul className="mini-list">{s.recentBoards.map((c) => <li key={c.id} onClick={() => openCanvas('board', c.id)}><span className="task-title">{c.title || 'Sem título'}</span><small className="muted">{fmtDateTime(c.opened_at ?? c.updated_at)}</small></li>)}</ul> : <p className="muted">Nenhum quadro. <button className="link" onClick={() => go('boards')}>Criar quadro</button></p>,
     shortcuts: (
       <ul className="shortcuts">
         <li><kbd>Ctrl+K</kbd> Pesquisa e comandos</li><li><kbd>Ctrl+N</kbd> Nova tarefa</li><li><kbd>Ctrl+Shift+N</kbd> Nova anotação</li>

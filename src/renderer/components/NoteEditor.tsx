@@ -30,19 +30,20 @@ async function saveImage(file: File): Promise<string> {
   return api().media.save(new Uint8Array(await file.arrayBuffer()), file.type);
 }
 
-export function NoteEditor({ id, onOpenTask, onClose }: { id: number; onOpenTask: (id: number) => void; onClose?: () => void }) {
+type CanvasNav = { openCanvas: (k: 'drawing' | 'board', id: number) => void; newCanvas: (k: 'drawing' | 'board', noteId: number) => void };
+export function NoteEditor({ id, onOpenTask, onClose, ...nav }: { id: number; onOpenTask: (id: number) => void; onClose?: () => void } & CanvasNav) {
   const { data: note, error } = useQuery(() => api().notes.get(id), [id]);
   // uma falha ao *recarregar* não desmonta um editor que já tem dados (evita perder o que está sendo digitado)
   if (error && !note) return <div className="note-pane empty">Anotação indisponível (pode estar na lixeira).</div>;
   if (!note) return <div className="note-pane" />;
-  return <Inner key={note.id} note={note} onOpenTask={onOpenTask} onClose={onClose} />;
+  return <Inner key={note.id} note={note} onOpenTask={onOpenTask} onClose={onClose} {...nav} />;
 }
 
 function B({ on, title, act, children }: { on?: boolean; title: string; act: () => void; children: React.ReactNode }) {
   return <button className={`tb ${on ? 'on' : ''}`} title={title} onMouseDown={(e) => e.preventDefault()} onClick={act}>{children}</button>;
 }
 
-function Inner({ note, onOpenTask, onClose }: { note: Note; onOpenTask: (id: number) => void; onClose?: () => void }) {
+function Inner({ note, onOpenTask, onClose, openCanvas, newCanvas }: { note: Note; onOpenTask: (id: number) => void; onClose?: () => void } & CanvasNav) {
   const ui = useUi();
   const [title, setTitle] = useState(note.title);
   const [json, setJson] = useState(note.content_json);
@@ -54,6 +55,8 @@ function Inner({ note, onOpenTask, onClose }: { note: Note; onOpenTask: (id: num
   const { data: categories = [] } = useQuery(() => api().categories.list());
   const { data: fresh } = useQuery(() => api().notes.get(note.id), [note.id]);
   const { data: allTasks = [] } = useQuery(() => api().tasks.list({ showCompleted: true, sort: 'title' }));
+  const { data: drawings = [] } = useQuery(() => api().canvases.list('drawing', { note_id: note.id }), [note.id]);
+  const { data: boards = [] } = useQuery(() => api().canvases.list('board', { note_id: note.id }), [note.id]);
 
   const insertFiles = (ed: Editor, files: File[]) => {
     const imgs = files.filter((f) => f.type.startsWith('image/'));
@@ -139,6 +142,11 @@ function Inner({ note, onOpenTask, onClose }: { note: Note; onOpenTask: (id: num
           <option value="">+ vincular tarefa</option>{allTasks.filter((t) => !(fresh?.tasks ?? []).some((x) => x.id === t.id)).map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}</select>
       </div>
 
+      <div className="note-meta">
+        <small className="muted">Desenhos:</small>
+        {[...drawings, ...boards].map((c) => <span key={c.kind + c.id} className="pill"><button className="link" onClick={() => openCanvas(c.kind, c.id)}>{c.title || 'Sem título'}</button>&nbsp;</span>)}
+        <button className="btn" style={{ padding: '1px 8px', fontSize: '.85em' }} onClick={() => newCanvas('drawing', note.id)}>+ desenho</button>
+      </div>
       <div className="toolbar-ed" role="toolbar" aria-label="Formatação">
         <B title="Desfazer (Ctrl+Z)" act={() => c().undo().run()}><Undo2 size={15} /></B>
         <B title="Refazer (Ctrl+Y)" act={() => c().redo().run()}><Redo2 size={15} /></B><span className="sep" />

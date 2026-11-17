@@ -2,7 +2,7 @@
 
 Aplicativo de produtividade e organização pessoal para Windows 10/11 — offline, sem login, dados locais.
 
-> **Status: Etapas 1 e 2 concluídas.** As seções marcadas como “Etapa N” na barra lateral
+> **Status: Etapas 1, 2 e 3 concluídas.** As seções marcadas como “Etapa N” na barra lateral
 > ainda **não estão implementadas** e exibem uma tela informando isso. Veja [Roteiro](#roteiro).
 
 ## O que já funciona
@@ -45,6 +45,28 @@ Aplicativo de produtividade e organização pessoal para Windows 10/11 — offli
 - Imagens ficam no próprio banco (tabela `media`, deduplicadas por SHA-256) e são servidas pelo protocolo
   interno somente leitura `ws-media://` — entram automaticamente no backup.
 
+### Etapa 3 — ferramentas visuais
+
+Motor de desenho: **Excalidraw** (MIT, maduro, offline — fontes copiadas localmente por `npm run assets`).
+
+- **Desenhos e esboços**: lápis/pincel (traço livre com espessura), borracha, linha, seta, retângulo, losango,
+  elipse/círculo, texto, seleção, mover, redimensionar, cores, espessura, desfazer/refazer, zoom, grade,
+  alinhamento e distribuição, duplicação, agrupamento, bloqueio, camadas, imagens (inserir/colar captura).
+  O desenho é salvo **como objetos editáveis** (não como imagem final), com miniatura na galeria.
+- **Quadro infinito**: tudo acima + notas adesivas, caixas de texto, **cartões de tarefa interativos**,
+  **cartões de anotação**, checklists clicáveis (`☐/☑`), quadros/agrupamentos (frames), setas e conectores
+  ligados aos objetos, links para outros quadros, vários quadros independentes.
+  Roda do mouse aproxima/afasta (alternável para rolar); arrastar com espaço ou ferramenta mão move a tela.
+- **Sincronização**: o quadro guarda só a referência (`taskId`/`noteId`); título, status e prioridade vêm
+  sempre do registro. Marcar como concluída no painel do cartão reflete na lista e no Kanban, e vice-versa;
+  editar o texto do cartão renomeia a tarefa. Notas mostram título e trecho atualizados.
+- **Persistência**: posição, dimensões, conteúdo, cores, conexões, grupos, zoom e posição da câmera;
+  imagens na biblioteca interna (deduplicadas). Reabre exatamente como estava, inclusive o último quadro aberto.
+- **Exportação PNG ou PDF**, ajustada automaticamente ao conteúdo (ou só a seleção), 1×/2×/3×, com/sem fundo.
+  Gravação atômica no destino escolhido; trata falta de espaço em disco.
+- **Versões** (automática a cada 10 min de edição, manual, restaurar), duplicar, lixeira, histórico,
+  pesquisa pelo título e pelos textos do desenho (Ctrl+K), vínculos com tarefas, notas e projetos.
+
 Atalhos: `Ctrl+Shift+N` nova anotação · `Ctrl+K` pesquisa · `Ctrl+N` nova tarefa · `Ctrl+B` barra lateral · `Ctrl+1..4` navegação · `Esc` fecha painel.
 
 ## Executar em desenvolvimento
@@ -64,6 +86,8 @@ npm run rebuild:electron
 npm run dev
 ```
 
+(`dev` e `build` executam `npm run assets`, que copia as fontes do editor de desenho para uso offline.)
+
 `rebuild:electron` compila o SQLite nativo para o Electron. Para rodar os testes (que usam o Node),
 recompile para o Node antes: `npm rebuild better-sqlite3`.
 
@@ -73,7 +97,7 @@ recompile para o Node antes: `npm rebuild better-sqlite3`.
 npm test
 ```
 
-Cobrem: Teste 2 (nota com formatação, checklist, tabela e imagem preservada após reabrir), migração v1→v2
+Cobrem: Teste 3 (quadro com tarefa, nota, desenho livre, seta, imagem, grupos e câmera idênticos após reabrir), Teste 4 pela camada de dados do quadro, versões/lixeira/vínculos de desenhos, migração v2→v3; Teste 2 (nota com formatação, checklist, tabela e imagem preservada após reabrir), migração v1→v2
 com backup preventivo, pesquisa FTS sem acentos, versões, pastas, vínculos, lixeira de notas, mídia; Teste 1 (10 tarefas/status persistem após reabrir), Teste 4 (lista ↔ Kanban no mesmo registro),
 Teste 6 (reabrir/atualizar sem perder dados nem reaplicar migrações), Teste 7 (transação interrompida e
 processo encerrado sem `close()` preservam apenas dados confirmados), recorrência, duplicação, lixeira,
@@ -111,9 +135,10 @@ Documentação técnica: [docs/ARQUITETURA.md](docs/ARQUITETURA.md).
 |---|---|---|
 | 1 | Base, SQLite, interface, navegação, tarefas, Kanban, autosave | **Concluída** |
 | 2 | Editor de notas (rich text, versões), pastas, pesquisa em notas, lixeira de notas | **Concluída** |
-| 3 | Editor de desenhos, quadro infinito, conectores, tarefas/notas sincronizadas no quadro | Pendente |
+| 3 | Editor de desenhos, quadro infinito, conectores, tarefas/notas sincronizadas no quadro | **Concluída** |
 | 4 | Arquivos/anexos, captura de tela, notas flutuantes, agenda/lembretes, abas e painéis divididos | Pendente |
 | 5 | Backup ZIP (exportar/verificar/restaurar), otimizações, empacotamento final | Pendente |
 
 Ainda **não** existe: abas/divisão para a área de trabalho inteira (hoje há abas e lado a lado só nas notas),
-atalhos personalizáveis, anexos de arquivos em tarefas, notas flutuantes (Etapa 4), backup ZIP (Etapa 5).
+atalhos personalizáveis, anexos de arquivos em tarefas, **PDFs e links para arquivos dentro do quadro**
+(dependem da biblioteca de arquivos — Etapa 4), notas flutuantes (Etapa 4), backup ZIP (Etapa 5).

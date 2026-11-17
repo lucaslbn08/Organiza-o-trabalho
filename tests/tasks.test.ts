@@ -38,7 +38,7 @@ describe('Gerenciador de tarefas', () => {
   });
 
   it('duplica com checklist, envia para lixeira e restaura', async () => {
-    const { tasks, org, notes } = await openApp(':memory:');
+    const { tasks, org, notes, svc } = await openApp(':memory:');
     const t = tasks.create({ title: 'Original', tags: ['a', 'b'] });
     tasks.addChecklist(t.id, 'subtask', 'passo 1');
     const s2 = tasks.addChecklist(t.id, 'subtask', 'passo 2');
@@ -53,7 +53,7 @@ describe('Gerenciador de tarefas', () => {
     tasks.remove(t.id);
     expect(tasks.list()).toHaveLength(1);
     expect(org.trash()).toHaveLength(1);
-    org.restore('task', t.id, tasks, notes);
+    org.restore('task', t.id, svc);
     expect(tasks.list()).toHaveLength(2);
     expect(() => tasks.purge(t.id)).toThrow();
     tasks.remove(t.id);
@@ -90,14 +90,14 @@ describe('Gerenciador de tarefas', () => {
 
 describe('Teste 4 — Sincronização Lista ↔ Kanban (mesmo registro)', () => {
   it('mover no Kanban altera o status visto pela lista', async () => {
-    const { tasks, org, notes } = await openApp(':memory:');
+    const { tasks, org, notes, svc } = await openApp(':memory:');
     const a = tasks.create({ title: 'A' });
     const b = tasks.create({ title: 'B' });
     tasks.reorder([b.id, a.id], 'in_progress');
     const list = tasks.list({ statuses: ['in_progress'] });
     expect(list.map((t) => t.title)).toEqual(['B', 'A']);
     expect(tasks.list()).toHaveLength(2); // sem duplicação
-    expect(org.dashboard(tasks, notes).in_progress).toBe(2);
+    expect(org.dashboard(svc).in_progress).toBe(2);
   });
 });
 

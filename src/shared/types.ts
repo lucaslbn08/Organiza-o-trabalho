@@ -58,11 +58,11 @@ export interface KanbanColumn { id: number; workspace_id: number; status: TaskSt
 export interface HistoryEntry {
   id: number; entity_type: string; entity_id: number; action: string; details: string; created_at: string;
 }
-export interface TrashItem { entity_type: 'task' | 'project' | 'note'; id: number; title: string; deleted_at: string }
+export interface TrashItem { entity_type: 'task' | 'project' | 'note' | 'canvas'; id: number; title: string; deleted_at: string }
 
 export interface DashboardStats {
   total: number; pending: number; in_progress: number; paused: number; done: number; cancelled: number;
-  priority: Task[]; dueSoon: Task[]; overdue: Task[]; recentProjects: Project[]; recentNotes: NoteSummary[];
+  priority: Task[]; dueSoon: Task[]; overdue: Task[]; recentProjects: Project[]; recentNotes: NoteSummary[]; recentDrawings: CanvasSummary[]; recentBoards: CanvasSummary[];
 }
 
 export interface Settings {
@@ -71,6 +71,7 @@ export interface Settings {
   dashboardPanels: { id: string; visible: boolean }[];
   lastView: string; activeWorkspaceId: number;
   openNotes: number[]; activeNote: number | null;
+  openCanvas: { drawing: number | null; board: number | null }; wheelZoom: boolean;
 }
 
 export interface AppInfo { version: string; dbVersion: number; dataDir: string; platform: string; electron: string }
@@ -92,8 +93,20 @@ export interface NotePatch {
   title?: string; content_json?: string; folder_id?: number | null; project_id?: number | null; category_id?: number | null;
   pinned?: boolean; favorite?: boolean; tags?: string[];
 }
-export type SearchType = 'task' | 'note' | 'project' | 'tag';
+export type SearchType = 'task' | 'note' | 'project' | 'tag' | 'drawing' | 'board';
 export interface SearchHit { type: SearchType; id: number; title: string; snippet: string; extra?: string }
+
+export type CanvasKind = 'drawing' | 'board';
+export interface CanvasSummary {
+  id: number; kind: CanvasKind; title: string; project_id: number | null; thumbnail: string | null;
+  created_at: string; updated_at: string; opened_at: string | null;
+}
+export interface Canvas extends CanvasSummary {
+  scene_json: string; revision: number; links: { type: 'task' | 'note'; id: number; title: string }[];
+}
+export interface CanvasVersion { id: number; canvas_id: number; reason: string; created_at: string; size: number }
+export interface TaskBrief { id: number; title: string; status: TaskStatus; priority: TaskPriority; due_date: string | null; deleted: boolean }
+export interface NoteBrief { id: number; title: string; excerpt: string; deleted: boolean }
 
 /** API exposta ao renderer pelo preload (contextBridge). */
 export interface WorkspaceApi {
@@ -137,7 +150,18 @@ export interface WorkspaceApi {
     renameFolder(id: number, name: string): Promise<void>; moveFolder(id: number, parentId: number | null): Promise<void>;
     removeFolder(id: number): Promise<void>;
   };
-  media: { save(bytes: Uint8Array, mime: string): Promise<string> };
+  media: { save(bytes: Uint8Array, mime: string): Promise<string>; get(hash: string): Promise<{ mime: string; bytes: Uint8Array } | null> };
+  canvases: {
+    list(kind: CanvasKind, q?: { search?: string; project_id?: number; task_id?: number; note_id?: number }): Promise<CanvasSummary[]>;
+    get(id: number): Promise<Canvas>;
+    create(input: { kind: CanvasKind; title?: string; project_id?: number | null; task_id?: number; note_id?: number }): Promise<Canvas>;
+    update(id: number, patch: { title?: string; scene_json?: string; project_id?: number | null; thumbnail?: string | null }): Promise<{ revision: number; updated_at: string }>;
+    duplicate(id: number): Promise<Canvas>; remove(id: number): Promise<void>; touch(id: number): Promise<void>;
+    link(id: number, type: 'task' | 'note', targetId: number): Promise<void>; unlink(id: number, type: 'task' | 'note', targetId: number): Promise<void>;
+    versions(id: number): Promise<CanvasVersion[]>; snapshot(id: number): Promise<void>; restoreVersion(versionId: number): Promise<void>;
+  };
+  briefs: { tasks(ids: number[]): Promise<TaskBrief[]>; notes(ids: number[]): Promise<NoteBrief[]> };
+  files: { saveAs(bytes: Uint8Array, defaultName: string, ext: 'png' | 'pdf'): Promise<string | null> };
   search: { query(q: string, types?: SearchType[]): Promise<SearchHit[]> };
   trash: { list(): Promise<TrashItem[]>; restore(type: TrashItem['entity_type'], id: number): Promise<void>; purge(type: TrashItem['entity_type'], id: number): Promise<void>; empty(): Promise<void> };
   db: { checkIntegrity(): Promise<{ ok: boolean; message: string }> };

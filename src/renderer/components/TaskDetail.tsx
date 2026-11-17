@@ -6,19 +6,21 @@ import { api, useQuery, useAutosave, fmtDateTime } from '../lib/api';
 import { useUi } from '../lib/ui';
 import { StatusSelect, PrioritySelect } from './TaskBits';
 
-type NoteNav = { openNote: (id: number) => void; newNote: (taskId: number) => void };
-export function TaskDetailPanel({ id, onClose, openNote, newNote }: { id: number; onClose: () => void } & NoteNav) {
+type NoteNav = { openNote: (id: number) => void; newNote: (taskId: number) => void; openCanvas: (k: 'drawing' | 'board', id: number) => void; newCanvas: (k: 'drawing' | 'board', taskId: number) => void };
+export function TaskDetailPanel({ id, onClose, ...nav }: { id: number; onClose: () => void } & NoteNav) {
   const { data: t } = useQuery(() => api().tasks.get(id), [id]);
   if (!t) return <aside className="detail" />;
-  return <Editor key={t.id} t={t} onClose={onClose} openNote={openNote} newNote={newNote} />;
+  return <Editor key={t.id} t={t} onClose={onClose} {...nav} />;
 }
 
-function Editor({ t, onClose, openNote, newNote }: { t: TD; onClose: () => void } & NoteNav) {
+function Editor({ t, onClose, openNote, newNote, openCanvas, newCanvas }: { t: TD; onClose: () => void } & NoteNav) {
   const ui = useUi();
   const { data: projects = [] } = useQuery(() => api().projects.list());
   const { data: categories = [] } = useQuery(() => api().categories.list());
   const { data: notes = [] } = useQuery(() => api().notes.list({ task_id: t.id }), [t.id]);
   const { data: allNotes = [] } = useQuery(() => api().notes.list({}));
+  const { data: drawings = [] } = useQuery(() => api().canvases.list('drawing', { task_id: t.id }), [t.id]);
+  const { data: boards = [] } = useQuery(() => api().canvases.list('board', { task_id: t.id }), [t.id]);
   const [title, setTitle] = useState(t.title);
   const [desc, setDesc] = useState(t.description);
   const [tags, setTags] = useState(t.tags.map((g) => g.name).join(', '));
@@ -93,6 +95,17 @@ function Editor({ t, onClose, openNote, newNote }: { t: TD; onClose: () => void 
             {allNotes.filter((n) => !notes.some((x) => x.id === n.id)).map((n) => <option key={n.id} value={n.id}>{n.title || 'Sem título'}</option>)}
           </select>
         </div>
+      </section>
+
+      <section>
+        <h4>Desenhos e quadros</h4>
+        {[...drawings, ...boards].map((c) => (
+          <div key={c.kind + c.id} className="check-row">
+            <small className="muted">{c.kind === 'drawing' ? 'Desenho' : 'Quadro'}</small>
+            <a href="#" onClick={(e) => { e.preventDefault(); openCanvas(c.kind, c.id); }}>{c.title || 'Sem título'}</a>
+          </div>
+        ))}
+        <div className="row"><button className="btn" onClick={() => newCanvas('drawing', t.id)}><Plus size={14} /> Novo desenho</button></div>
       </section>
 
       <section>
